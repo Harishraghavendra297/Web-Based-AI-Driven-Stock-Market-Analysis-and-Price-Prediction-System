@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %} | Fundamental Data{% endblock %}
+
+{% block content %}
+<div class="row">
+
+    <!-- SIDEBAR -->
+    <div class="col-md-3">
+        <div class="card dark-card">
+            <div class="card-header">
+                <h5>Select Stocks</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Stocks</label>
+                        <select class="form-select" name="stocks" multiple size="15">
+                            {% for display_name in stocks.keys() %}
+                                <option value="{{ display_name }}">{{ display_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Hold Ctrl to select multiple</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        Get Data
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="col-md-9">
+
+        {% if fundamentals %}
+            {% for symbol, data in fundamentals.items() %}
+            <div class="card dark-card mb-4">
+                <div class="card-header">
+                    <h5>{{ data.company }} ({{ symbol }})</h5>
+                </div>
+                <div class="card-body">
+
+                    {% if data.error %}
+                        <div class="alert alert-danger">{{ data.error }}</div>
+                    {% else %}
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Market Cap:</strong> {{ data.market_cap }}</p>
+                                <p><strong>P/E Ratio:</strong> {{ data.pe_ratio }}</p>
+                                <p><strong>EPS:</strong> {{ data.eps }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Dividend Yield:</strong> {{ data.dividend_yield }}</p>
+                                <p><strong>Sector:</strong> {{ data.sector }}</p>
+                                <p><strong>Industry:</strong> {{ data.industry }}</p>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-info">
+                Select stocks from the sidebar to view fundamental data.
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

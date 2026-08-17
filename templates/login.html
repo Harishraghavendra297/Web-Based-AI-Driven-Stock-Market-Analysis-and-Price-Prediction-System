@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %} | Login{% endblock %}
+
+{% block content %}
+<style>
+/* ===== GLOW CARD ===== */
+.glow-card {
+    background: #111;
+    border-radius: 18px;
+    padding: 2px;
+    background: linear-gradient(135deg, #00f2ff, #7f00ff);
+}
+
+.glow-inner {
+    background: #111;
+    border-radius: 16px;
+}
+
+/* ===== INPUTS ===== */
+.form-control {
+    background: #0b0b0b;
+    color: #fff;
+    border: 1px solid #333;
+}
+.form-control:focus {
+    background: #0b0b0b;
+    color: #fff;
+    border-color: #00f2ff;
+    box-shadow: none;
+}
+
+/* ===== LOGIN BUTTON ===== */
+.btn-animated {
+    background: linear-gradient(135deg, #00f2ff, #7f00ff);
+    border: none;
+    color: #fff;
+    transition: all 0.3s ease;
+}
+.btn-animated:hover {
+    transform: scale(1.03);
+    box-shadow: 0 0 20px rgba(0,242,255,0.6);
+}
+
+/* ===== PASSWORD EYE ===== */
+.password-wrapper {
+    position: relative;
+}
+.toggle-password {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #aaa;
+}
+
+/* ===== SHAKE ERROR ===== */
+.shake {
+    animation: shake 0.4s;
+}
+@keyframes shake {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    50% { transform: translateX(5px); }
+    75% { transform: translateX(-5px); }
+    100% { transform: translateX(0); }
+}
+</style>
+
+<div class="container">
+    <div class="row justify-content-center align-items-center" style="min-height:90vh;">
+        <div class="col-md-5 col-lg-4">
+
+            <div class="glow-card">
+                <div class="glow-inner p-4 text-center">
+
+                    <!-- LOGO -->
+                    <div class="mb-3">
+                        <img src="{{ url_for('static', filename='logo.png') }}"
+                             alt="Logo"
+                             width="60">
+                    </div>
+
+                    <h3 class="fw-bold text-info">
+                        AI Stock Insight
+                    </h3>
+                    <p class="text-muted mb-4">
+                        Smart Market Analysis & Prediction
+                    </p>
+
+                    <form method="POST" action="{{ url_for('login') }}">
+
+                        <div class="mb-3 text-start">
+                            <label class="form-label text-muted">Username</label>
+                            <input type="text"
+                                   class="form-control form-control-lg"
+                                   name="username"
+                                   required>
+                        </div>
+
+                        <div class="mb-4 text-start password-wrapper">
+                            <label class="form-label text-muted">Password</label>
+                            <input type="password"
+                                   class="form-control form-control-lg"
+                                   name="password"
+                                   id="password"
+                                   required>
+                            <span class="toggle-password" onclick="togglePassword()">👁️</span>
+                        </div>
+
+                        <button type="submit"
+                                class="btn btn-animated btn-lg w-100 fw-semibold">
+                            Login
+                        </button>
+                    </form>
+
+                    <div class="text-center mt-4">
+                        <p class="text-muted mb-1">New here?</p>
+                        <a href="{{ url_for('signup') }}"
+                           class="btn btn-outline-secondary w-100 rounded-3">
+                            Create Account
+                        </a>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- PASSWORD TOGGLE -->
+<script>
+function togglePassword() {
+    const pwd = document.getElementById("password");
+    pwd.type = pwd.type === "password" ? "text" : "password";
+}
+</script>
+
+<!-- SHAKE ON LOGIN ERROR -->
+{% with messages = get_flashed_messages(category_filter=["error"]) %}
+{% if messages %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const box = document.querySelector(".glow-inner");
+    if (box) {
+        box.classList.add("shake");
+    }
+});
+</script>
+{% endif %}
+{% endwith %}
+
+{% endblock %}

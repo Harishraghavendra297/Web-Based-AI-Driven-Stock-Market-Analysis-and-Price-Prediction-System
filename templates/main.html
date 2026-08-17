@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %} | Stock Analysis{% endblock %}
+
+{% block content %}
+<div class="row">
+
+    <!-- ================= SIDEBAR ================= -->
+    <div class="col-md-3">
+        <div class="card dark-card mb-4">
+            <div class="card-header">
+                <h5>📊 Stock Selection</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main_page') }}">
+
+                    <div class="mb-3">
+                        <label class="form-label">Select Stock</label>
+                        <select class="form-select" name="stock" required>
+                            {% for display_name in stocks.keys() %}
+                                <option value="{{ display_name }}"
+                                    {% if display_name == selected_stock %}selected{% endif %}>
+                                    {{ display_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" class="form-control"
+                               name="start_date"
+                               value="{{ start_date }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">End Date</label>
+                        <input type="date" class="form-control"
+                               name="end_date"
+                               value="{{ end_date }}" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        Analyze
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% if has_data %}
+        <div class="card dark-card">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2">📌 Current Info</h6>
+                <p><strong>Symbol:</strong> {{ selected_symbol }}</p>
+                <p><strong>Current Price:</strong> ${{ "%.2f"|format(current_price) }}</p>
+                <p><strong>Last Updated:</strong> {{ last_date }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ================= MAIN CONTENT ================= -->
+    <div class="col-md-9">
+        {% if has_data %}
+        <div class="card dark-card mb-4">
+            <div class="card-header">
+                <h4 class="fw-bold">📈 {{ selected_stock }} Analysis</h4>
+            </div>
+
+            <div class="card-body">
+
+                <!-- PRICE TREND -->
+                <div class="analysis-section">
+                    <h5 class="section-title">📈 Price Trend</h5>
+                    <div class="chart-box">
+                        <div id="price-chart"></div>
+                    </div>
+                </div>
+
+                <!-- LINEAR REGRESSION -->
+                <div class="analysis-section">
+                    <div class="section-divider"></div>
+                    <h5 class="section-title">📐 Linear Regression Prediction</h5>
+                    <div class="chart-box">
+                        <div id="lr-chart"></div>
+                    </div>
+                </div>
+
+                <!-- LSTM -->
+                <div class="analysis-section">
+                    <div class="section-divider"></div>
+                    <h5 class="section-title">🤖 LSTM Future Prediction (Next 7 Days)</h5>
+                    <div class="chart-box">
+                        <div id="lstm-chart"></div>
+                    </div>
+                </div>
+
+                {% if lstm_table_data %}
+                <div class="analysis-section">
+                    <h5 class="section-title mt-4">📊 LSTM Prediction Table</h5>
+                    <div class="table-responsive mt-3">
+                        <table class="table table-dark table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Predicted Price</th>
+                                    <th>Change (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pred in lstm_table_data %}
+                                <tr>
+                                    <td>{{ pred.date }}</td>
+                                    <td>${{ "%.2f"|format(pred.price) }}</td>
+                                    <td class="{% if pred.change > 0 %}text-success{% elif pred.change < 0 %}text-danger{% endif %}">
+                                        {{ "%.2f"|format(pred.change) }}%
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if recent_data %}
+                <div class="analysis-section">
+                    <div class="section-divider"></div>
+                    <h5 class="section-title">🕒 Recent Price Data (Last 10 Days)</h5>
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped table-bordered mt-2">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Open</th>
+                                    <th>High</th>
+                                    <th>Low</th>
+                                    <th>Close</th>
+                                    <th>Volume</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in recent_data %}
+                                <tr>
+                                    <td>{{ row.Date }}</td>
+                                    <td>${{ row.Open }}</td>
+                                    <td>${{ row.High }}</td>
+                                    <td>${{ row.Low }}</td>
+                                    <td><strong>${{ row.Close }}</strong></td>
+                                    <td>{{ "{:,}".format(row.Volume) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="price-data" type="application/json">
+{{ price_data | safe if price_data else "null" }}
+</script>
+
+<script id="lr-data" type="application/json">
+{{ lr_data | safe if lr_data else "null" }}
+</script>
+
+<script id="lstm-data" type="application/json">
+{{ lstm_data | safe if lstm_data else "null" }}
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const priceData = JSON.parse(document.getElementById("price-data").textContent);
+    const lrData = JSON.parse(document.getElementById("lr-data").textContent);
+    const lstmData = JSON.parse(document.getElementById("lstm-data").textContent);
+
+    if (priceData) {
+        Plotly.newPlot("price-chart", [{
+            x: priceData.dates,
+            y: priceData.prices,
+            mode: "lines"
+        }], { title: "Price Trend" });
+    }
+
+    if (lrData) {
+        Plotly.newPlot(
+            "lr-chart",
+            [
+                { x: lrData.dates, y: lrData.actual, mode: "lines", name: "Actual" },
+                { x: lrData.dates, y: lrData.predicted, mode: "lines", name: "Predicted" }
+            ],
+            { title: "Linear Regression" },
+            { displayModeBar: false }
+        );
+    }
+
+    if (lstmData) {
+        Plotly.newPlot(
+            "lstm-chart",
+            [
+                { x: lstmData.historical_dates, y: lstmData.historical_prices, mode: "lines", name: "Historical" },
+                { x: lstmData.future_dates, y: lstmData.future_prices, mode: "lines+markers", name: "Predicted" }
+            ],
+            { title: "LSTM Prediction" },
+            { displayModeBar: false }
+        );
+    }
+});
+</script>
+{% endblock %}

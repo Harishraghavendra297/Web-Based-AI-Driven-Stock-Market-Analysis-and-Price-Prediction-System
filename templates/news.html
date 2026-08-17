@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Stock News{% endblock %}
+
+{% block content %}
+<div class="row">
+
+    <!-- ===== SIDEBAR ===== -->
+    <div class="col-md-3">
+        <div class="card dark-card">
+            <div class="card-header">
+                <h5>Select Stocks</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <select class="form-select mb-3" name="stocks" multiple size="15">
+                        {% for name in stocks.keys() %}
+                            <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        Get News
+                    </button>
+
+                    <small class="text-muted d-block mt-2">
+                        Hold Ctrl (Cmd on Mac) to select multiple
+                    </small>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== NEWS CONTENT ===== -->
+    <div class="col-md-9">
+
+        {% if news_data %}
+            {% for symbol, data in news_data.items() %}
+            <div class="card dark-card mb-4">
+
+                <div class="card-header">
+                    <h5>{{ data.company }} ({{ symbol }})</h5>
+                </div>
+
+                <div class="card-body">
+
+                    {% if data.error %}
+                        <div class="alert alert-danger">
+                            {{ data.error }}
+                        </div>
+
+                    {% elif data.news %}
+                        <ul class="list-group list-group-flush">
+
+                            {% for item in data.news %}
+                            <li class="list-group-item bg-dark text-light border-secondary">
+
+                                <!-- HEADLINE -->
+                                <h6 class="mb-1">
+                                    <a href="{{ item.link }}"
+                                       target="_blank"
+                                       class="text-info text-decoration-none">
+                                        {{ item.title }}
+                                    </a>
+                                </h6>
+
+                                <!-- DATE -->
+                                {% if item.published %}
+                                <small class="text-muted d-block">
+                                    {{ item.published }}
+                                </small>
+                                {% endif %}
+
+                                <!-- 2–3 LINE GIST -->
+                                <p class="mt-2 mb-0">
+                                    {{ item.summary }}
+                                </p>
+
+                            </li>
+                            {% endfor %}
+
+                        </ul>
+                    {% else %}
+                        <p class="text-muted">
+                            No news found for this stock.
+                        </p>
+                    {% endif %}
+
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-info">
+                Select stocks from the left panel to view the latest news.
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

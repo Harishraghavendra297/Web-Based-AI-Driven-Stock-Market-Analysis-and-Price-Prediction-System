@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %} | Sign Up{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10 col-lg-8">
+        <div class="card dark-card mt-4 mb-5 glow-border">
+
+            <!-- HEADER -->
+            <div class="card-header text-center">
+                <img src="{{ url_for('static', filename='logo.png') }}"
+                     width="50"
+                     class="mb-2">
+                <h4 class="text-info fw-bold">Create Account</h4>
+                <small class="text-muted">AI-Powered Stock Analysis Platform</small>
+            </div>
+
+            <div class="card-body">
+
+                <form method="POST" action="{{ url_for('signup') }}">
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">First Name *</label>
+                            <input type="text" class="form-control form-control-lg" name="first_name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Last Name *</label>
+                            <input type="text" class="form-control form-control-lg" name="last_name" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Mobile Number *</label>
+                            <input type="tel" class="form-control form-control-lg" name="mobile_number" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Email *</label>
+                            <input type="email" class="form-control form-control-lg" name="email" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Occupation</label>
+                        <input type="text" class="form-control form-control-lg" name="occupation">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Date of Birth *</label>
+                        <input type="date" class="form-control form-control-lg" name="date_of_birth" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Username *</label>
+                        <input type="text" class="form-control form-control-lg" name="username" required>
+                    </div>
+
+                    <!-- PASSWORD -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3 password-wrapper">
+                            <label class="form-label">Password *</label>
+                            <input type="password"
+                                   class="form-control form-control-lg"
+                                   name="password"
+                                   id="signup-password"
+                                   required>
+                            <span class="toggle-password" onclick="toggleSignupPassword()">👁️</span>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Confirm Password *</label>
+                            <input type="password"
+                                   class="form-control form-control-lg"
+                                   name="confirm_password"
+                                   required>
+                        </div>
+                    </div>
+
+                    <!-- CREATE BUTTON -->
+                    <button type="submit"
+                            class="btn btn-login-blue w-100 mt-2">
+                        Create Account
+                    </button>
+
+                    <!-- BACK -->
+                    <a href="{{ url_for('login') }}"
+                       class="btn btn-outline-secondary w-100 mt-3">
+                        Back to Login
+                    </a>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleSignupPassword() {
+    const pwd = document.getElementById("signup-password");
+    pwd.type = pwd.type === "password" ? "text" : "password";
+}
+</script>
+{% endblock %}

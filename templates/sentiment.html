@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Sentiment Analysis{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3">
+        <div class="card dark-card">
+            <div class="card-header">
+                <h5>Select Stocks</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Stocks</label>
+                        <select class="form-select" name="stocks" multiple size="15">
+                            {% for display_name in stocks.keys() %}
+                            <option value="{{ display_name }}">{{ display_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Hold Ctrl to select multiple</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Analyze Sentiment</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        {% if sentiment_data %}
+        {% for symbol, data in sentiment_data.items() %}
+        <div class="card dark-card mb-4">
+            <div class="card-header">
+                <h5>Sentiment Analysis for {{ data.company }}</h5>
+            </div>
+            <div class="card-body">
+                {% if 'error' in data %}
+                <div class="alert alert-danger">{{ data.error }}</div>
+                {% else %}
+                <!-- Sentiment Summary -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-success text-white text-center p-3">
+                            <h4>{{ data.summary.positive }}</h4>
+                            <p>Positive</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-secondary text-white text-center p-3">
+                            <h4>{{ data.summary.neutral }}</h4>
+                            <p>Neutral</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-danger text-white text-center p-3">
+                            <h4>{{ data.summary.negative }}</h4>
+                            <p>Negative</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Individual News Sentiments -->
+                <h6>News Analysis</h6>
+                {% for item in data.sentiments %}
+                <div class="sentiment-item mb-3 p-3 border rounded 
+                    {% if item.sentiment == 'Positive' %}border-success
+                    {% elif item.sentiment == 'Negative' %}border-danger
+                    {% else %}border-secondary{% endif %}">
+                    <div class="d-flex justify-content-between">
+                        <strong>{{ item.title }}</strong>
+                        <span class="badge 
+                            {% if item.sentiment == 'Positive' %}bg-success
+                            {% elif item.sentiment == 'Negative' %}bg-danger
+                            {% else %}bg-secondary{% endif %}">
+                            {{ item.sentiment }} ({{ "%.3f"|format(item.score) }})
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="alert alert-info">
+            Select stocks from the sidebar to analyze sentiment.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
