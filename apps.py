@@ -20,6 +20,8 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 import warnings
 import re
 from urllib.parse import quote_plus
+import requests # <-- ADDED THIS TO FAKE A WEB BROWSER
+
 warnings.filterwarnings('ignore')
 
 # Try to import TensorFlow (optional)
@@ -129,12 +131,12 @@ def clean_summary(summary, title):
     if not summary:
         return ""
 
-    summary = unescape(summary)                         # remove &nbsp; etc
-    summary = re.sub(r'<[^>]+>', '', summary)           # strip HTML tags
-    summary = summary.replace(title, '')                # remove repeated title
-    summary = re.sub(r'\s+', ' ', summary).strip()      # normalize spaces
+    summary = unescape(summary)                         
+    summary = re.sub(r'<[^>]+>', '', summary)           
+    summary = summary.replace(title, '')                
+    summary = re.sub(r'\s+', ' ', summary).strip()      
 
-    return summary[:280]                                # ~2–3 lines
+    return summary[:280]                                
 
 def get_stock_news(company_name):
     query = quote_plus(f"{company_name} stock")
@@ -162,14 +164,12 @@ def get_stock_news(company_name):
 
 # ==================== DATABASE FUNCTIONS ====================
 def init_db():
-    """Initialize database and create tables"""
     print("=" * 50)
     print("INITIALIZING DATABASE")
     print("=" * 50)
     
     conn = sqlite3.connect('user_data.db')
 
-    # Create users table with all fields
     conn.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -184,7 +184,6 @@ def init_db():
         )
     ''')
     
-    # Add a test user
     try:
         conn.execute('''
             INSERT OR IGNORE INTO users 
@@ -206,10 +205,7 @@ def init_db():
     print("=" * 50)
 
 def get_connection():
-    """Get database connection and ensure the table always exists"""
     conn = sqlite3.connect('user_data.db')
-    
-    # Auto-create the table just in case the cloud server wiped it during sleep
     conn.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -227,7 +223,6 @@ def get_connection():
     return conn
 
 def add_user(first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password):
-    """Add new user to database"""
     conn = get_connection()
     try:
         conn.execute('''
@@ -235,19 +230,15 @@ def add_user(first_name, last_name, mobile_number, email, occupation, date_of_bi
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password))
         conn.commit()
-        print(f"✅ User '{username}' added successfully")
         return True
     except sqlite3.IntegrityError:
-        print(f"❌ Username '{username}' already exists")
         return False
     except Exception as e:
-        print(f"❌ Error adding user: {e}")
         return False
     finally:
         conn.close()
 
 def authenticate_user(username, password):
-    """Authenticate user"""
     conn = get_connection()
     cursor = conn.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, password))
     user = cursor.fetchone()
@@ -256,9 +247,7 @@ def authenticate_user(username, password):
 
 # ==================== LSTM PREDICTION ====================
 def lstm_predict(data, n_future=7, n_past=60, epochs=10):
-    """Predict future stock prices using LSTM"""
     if not TENSORFLOW_AVAILABLE:
-        # Fallback: simple moving average prediction
         last_price = data['Close'].iloc[-1]
         import random
         predictions = []
@@ -301,8 +290,6 @@ def lstm_predict(data, n_future=7, n_past=60, epochs=10):
         predicted_prices = scaler.inverse_transform(np.array(predicted_prices).reshape(-1,1))
         return predicted_prices.flatten().tolist()
     except Exception as e:
-        print(f"LSTM prediction error: {e}")
-        # Fallback
         last_price = data['Close'].iloc[-1]
         return [last_price * (1 + i * 0.01) for i in range(n_future)]
 
@@ -310,14 +297,12 @@ def lstm_predict(data, n_future=7, n_past=60, epochs=10):
 
 @app.route('/')
 def index():
-    """Home page - redirect based on login status"""
     if 'user' in session:
         return redirect(url_for('main_page'))
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page"""
     if 'user' in session:
         return redirect(url_for('main_page'))
     
@@ -340,7 +325,6 @@ def login():
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
-    """Signup page"""
     if 'user' in session:
         return redirect(url_for('main_page'))
     
@@ -355,7 +339,6 @@ def signup():
         password = request.form.get('password', '').strip()
         confirm_password = request.form.get('confirm_password', '').strip()
         
-        # Validation
         errors = []
         if not all([first_name, last_name, mobile_number, email, username, password, confirm_password]):
             errors.append('Please fill all required fields')
@@ -380,7 +363,6 @@ def signup():
 
 @app.route('/logout')
 def logout():
-    """Logout user"""
     username = session.get('user', 'User')
     session.pop('user', None)
     flash(f'Goodbye, {username}! You have been logged out.', 'info')
@@ -391,7 +373,6 @@ def main_page():
     if 'user' not in session:
         return redirect(url_for('login'))
 
-    # ---- Defaults ----
     selected_display_name = request.form.get('stock', 'Apple Inc. (US)')
     selected_symbol = display_names.get(selected_display_name, 'AAPL')
 
@@ -401,7 +382,6 @@ def main_page():
     start_date = request.form.get('start_date', default_start)
     end_date = request.form.get('end_date', default_end)
 
-    # ---- Context ----
     context = {
         'username': session['user'],
         'stocks': display_names,
@@ -420,10 +400,16 @@ def main_page():
 
     # ---- Download stock data ----
     try:
-        df = yf.download(selected_symbol, start=start_date, end=end_date)
+        # FAKE THE BROWSER SESSION HERE
+        custom_session = requests.Session()
+        custom_session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        })
+
+        df = yf.download(selected_symbol, start=start_date, end=end_date, session=custom_session, progress=False)
 
         if df.empty:
-            flash(f'No data available for {selected_display_name}', 'warning')
+            flash(f'No data available for {selected_display_name}. (Yahoo Finance rate limit bypassed, try adjusting dates)', 'warning')
             return render_template('main.html', **context)
 
         # 🔥 IMPORTANT FIX (removes MultiIndex columns)
@@ -436,21 +422,17 @@ def main_page():
 
     context['has_data'] = True
 
-    # ---- Close prices ----
     close_prices = df['Close']
 
-    # ---- Price Chart ----
     price_data = {
         'dates': df.index.strftime('%Y-%m-%d').tolist(),
         'prices': close_prices.tolist()
     }
     context['price_data'] = json.dumps(price_data)
 
-    # ---- Current Price ----
     context['current_price'] = round(float(close_prices.iloc[-1]), 2)
     context['last_date'] = df.index[-1].strftime('%Y-%m-%d')
 
-    # ---- Recent Table ----
     recent_data = []
 
     for idx, row in df.tail(10).iterrows():
@@ -534,7 +516,6 @@ def main_page():
 
 @app.route('/fundamental', methods=['GET', 'POST'])
 def fundamental_data():
-    """Fundamental data page"""
     if 'user' not in session:
         return redirect(url_for('login'))
 
@@ -552,10 +533,15 @@ def fundamental_data():
 
     for symbol in selected_symbols:
         try:
-            stock = yf.Ticker(symbol)
+            # FAKE THE BROWSER SESSION HERE TOO
+            custom_session = requests.Session()
+            custom_session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            })
+            
+            stock = yf.Ticker(symbol, session=custom_session)
             info = stock.info or {}
 
-            # Format market cap
             market_cap = info.get('marketCap')
             if isinstance(market_cap, (int, float)):
                 if market_cap >= 1e12:
@@ -634,7 +620,6 @@ def news():
 
 @app.route('/sentiment', methods=['GET', 'POST'])
 def sentiment():
-    """Sentiment analysis page"""
     if 'user' not in session:
         return redirect(url_for('login'))
     
@@ -695,10 +680,8 @@ def sentiment():
                          stocks=display_names,
                          sentiment_data=sentiment_data)
 
-# Call init_db() to ensure the database initializes immediately when Gunicorn boots up
 init_db()
 
-# ==================== RUN APPLICATION ====================
 if __name__ == "__main__":
     app.run(
         host="127.0.0.1",
