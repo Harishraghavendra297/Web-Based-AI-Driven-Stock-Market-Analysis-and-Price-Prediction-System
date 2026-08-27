@@ -450,6 +450,22 @@ def logout():
     flash(f'Goodbye, {username}! You have been logged out.', 'info')
     return redirect(url_for('login'))
 
+@app.route('/admin/users')
+def view_users():
+    if session.get('user') != 'test': # Change 'test' to your username
+        return "Access Denied", 403
+        
+    conn = get_connection()
+    cursor = conn.execute('SELECT id, first_name, last_name, email, username FROM users')
+    users = cursor.fetchall()
+    conn.close()
+    
+    html = "<h1>Registered Users on Live Server</h1><ul>"
+    for user in users:
+        html += f"<li>ID: {user[0]} | Name: {user[1]} {user[2]} | Email: {user[3]} | Username: {user[4]}</li>"
+    html += "</ul>"
+    return html
+
 @app.route('/main', methods=['GET', 'POST'])
 def main_page():
     if 'user' not in session:
