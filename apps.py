@@ -20,7 +20,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 import warnings
 import re
 from urllib.parse import quote_plus
-import requests # <-- ADDED THIS TO FAKE A WEB BROWSER
+import requests
 
 warnings.filterwarnings('ignore')
 
@@ -131,12 +131,12 @@ def clean_summary(summary, title):
     if not summary:
         return ""
 
-    summary = unescape(summary)                         
-    summary = re.sub(r'<[^>]+>', '', summary)           
-    summary = summary.replace(title, '')                
-    summary = re.sub(r'\s+', ' ', summary).strip()      
+    summary = unescape(summary)                         # remove &nbsp; etc
+    summary = re.sub(r'<[^>]+>', '', summary)           # strip HTML tags
+    summary = summary.replace(title, '')                # remove repeated title
+    summary = re.sub(r'\s+', ' ', summary).strip()      # normalize spaces
 
-    return summary[:280]                                
+    return summary[:280]                                # ~2–3 lines
 
 def get_stock_news(company_name):
     query = quote_plus(f"{company_name} stock")
@@ -160,6 +160,84 @@ def get_stock_news(company_name):
         })
 
     return news
+
+
+# ==================== DATA FALLBACK GENERATORS ====================
+def get_stock_data_with_fallback(symbol, start_date, end_date):
+    """Attempts to fetch real data, falls back to simulated data if Yahoo throws 429"""
+    try:
+        custom_session = requests.Session()
+        custom_session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        })
+        df = yf.download(symbol, start=start_date, end=end_date, session=custom_session, progress=False)
+        if not df.empty:
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            return df, False 
+    except Exception as e:
+        print(f"Yahoo Finance blocked request: {e}")
+    
+    # --- FALLBACK: Generate realistic simulated data ---
+    dates = pd.date_range(start=start_date, end=end_date, freq='B')
+    np.random.seed(sum([ord(c) for c in symbol])) 
+    
+    base_price = 150.0
+    if 'GOOG' in symbol or 'MSFT' in symbol: base_price = 300.0
+    
+    returns = np.random.normal(0.0005, 0.015, len(dates))
+    prices = base_price * np.exp(np.cumsum(returns))
+    
+    df = pd.DataFrame(index=dates)
+    df['Close'] = prices
+    df['Open'] = prices * np.random.uniform(0.99, 1.01, len(dates))
+    df['High'] = df[['Open', 'Close']].max(axis=1) * np.random.uniform(1.0, 1.01, len(dates))
+    df['Low'] = df[['Open', 'Close']].min(axis=1) * np.random.uniform(0.99, 1.0, len(dates))
+    df['Volume'] = np.random.randint(1000000, 5000000, len(dates))
+    
+    return df, True 
+
+def get_fundamentals_with_fallback(symbol, company_name):
+    """Attempts to fetch real info, falls back to simulated stats if Yahoo throws 429"""
+    try:
+        custom_session = requests.Session()
+        custom_session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        })
+        stock = yf.Ticker(symbol, session=custom_session)
+        info = stock.info
+        if not info:
+            raise ValueError("Empty info returned")
+
+        market_cap = info.get('marketCap')
+        if isinstance(market_cap, (int, float)):
+            if market_cap >= 1e12: market_cap_str = f"${market_cap / 1e12:.2f}T"
+            elif market_cap >= 1e9: market_cap_str = f"${market_cap / 1e9:.2f}B"
+            else: market_cap_str = f"${market_cap / 1e6:.2f}M"
+        else:
+            market_cap_str = "N/A"
+
+        return {
+            'company': company_name,
+            'market_cap': market_cap_str,
+            'pe_ratio': round(info.get('trailingPE', 0), 2) if info.get('trailingPE') else 'N/A',
+            'eps': round(info.get('trailingEps', 0), 2) if info.get('trailingEps') else 'N/A',
+            'dividend_yield': f"{info.get('dividendYield', 0) * 100:.2f}%" if info.get('dividendYield') else 'N/A',
+            'sector': info.get('sector', 'N/A'),
+            'industry': info.get('industry', 'N/A')
+        }
+    except Exception as e:
+        # --- FALLBACK: Generate realistic simulated stats ---
+        np.random.seed(sum([ord(c) for c in symbol]))
+        return {
+            'company': company_name + " (Simulated Mode)",
+            'market_cap': f"${np.random.uniform(50, 2000):.2f}B",
+            'pe_ratio': round(np.random.uniform(10, 50), 2),
+            'eps': round(np.random.uniform(2, 15), 2),
+            'dividend_yield': f"{np.random.uniform(0.5, 4.5):.2f}%",
+            'sector': 'Technology/Finance',
+            'industry': 'Enterprise'
+        }
 
 
 # ==================== DATABASE FUNCTIONS ====================
@@ -230,10 +308,13 @@ def add_user(first_name, last_name, mobile_number, email, occupation, date_of_bi
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password))
         conn.commit()
+        print(f"✅ User '{username}' added successfully")
         return True
     except sqlite3.IntegrityError:
+        print(f"❌ Username '{username}' already exists")
         return False
     except Exception as e:
+        print(f"❌ Error adding user: {e}")
         return False
     finally:
         conn.close()
@@ -290,6 +371,7 @@ def lstm_predict(data, n_future=7, n_past=60, epochs=10):
         predicted_prices = scaler.inverse_transform(np.array(predicted_prices).reshape(-1,1))
         return predicted_prices.flatten().tolist()
     except Exception as e:
+        print(f"LSTM prediction error: {e}")
         last_price = data['Close'].iloc[-1]
         return [last_price * (1 + i * 0.01) for i in range(n_future)]
 
@@ -398,30 +480,17 @@ def main_page():
         'last_date': None
     }
 
-    # ---- Download stock data ----
-    try:
-        # FAKE THE BROWSER SESSION HERE
-        custom_session = requests.Session()
-        custom_session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        })
+    # Fetch data using the fallback generator
+    df, is_simulated = get_stock_data_with_fallback(selected_symbol, start_date, end_date)
 
-        df = yf.download(selected_symbol, start=start_date, end=end_date, session=custom_session, progress=False)
-
-        if df.empty:
-            flash(f'No data available for {selected_display_name}. (Yahoo Finance rate limit bypassed, try adjusting dates)', 'warning')
-            return render_template('main.html', **context)
-
-        # 🔥 IMPORTANT FIX (removes MultiIndex columns)
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-    except Exception as e:
-        flash(f'Error downloading data: {e}', 'error')
+    if df.empty:
+        flash(f'No data available for {selected_display_name}', 'warning')
         return render_template('main.html', **context)
+        
+    if is_simulated:
+        flash(f'Server is in Demo Mode. Displaying simulated market data for {selected_display_name} to bypass Yahoo restrictions.', 'info')
 
     context['has_data'] = True
-
     close_prices = df['Close']
 
     price_data = {
@@ -434,7 +503,6 @@ def main_page():
     context['last_date'] = df.index[-1].strftime('%Y-%m-%d')
 
     recent_data = []
-
     for idx, row in df.tail(10).iterrows():
         recent_data.append({
             'Date': idx.strftime('%Y-%m-%d'),
@@ -498,13 +566,11 @@ def main_page():
 
         for d, p in zip(future_dates, lstm_predictions):
             change = ((p - last_price) / last_price) * 100
-
             lstm_table.append({
                 'date': d,
                 'price': round(p, 2),
                 'change': round(change, 2)
             })
-
             last_price = p
 
         context['lstm_table_data'] = lstm_table
@@ -525,54 +591,14 @@ def fundamental_data():
         selected_names = request.form.getlist('stocks')
         selected_symbols = [
             display_names[name]
-            for name in display_names
+            for name in selected_names
             if name in display_names
         ]
 
     fundamentals_data = {}
 
     for symbol in selected_symbols:
-        try:
-            # FAKE THE BROWSER SESSION HERE TOO
-            custom_session = requests.Session()
-            custom_session.headers.update({
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            })
-            
-            stock = yf.Ticker(symbol, session=custom_session)
-            info = stock.info or {}
-
-            market_cap = info.get('marketCap')
-            if isinstance(market_cap, (int, float)):
-                if market_cap >= 1e12:
-                    market_cap_str = f"${market_cap / 1e12:.2f}T"
-                elif market_cap >= 1e9:
-                    market_cap_str = f"${market_cap / 1e9:.2f}B"
-                elif market_cap >= 1e6:
-                    market_cap_str = f"${market_cap / 1e6:.2f}M"
-                else:
-                    market_cap_str = f"${market_cap:,.0f}"
-            else:
-                market_cap_str = "N/A"
-
-            fundamentals_data[symbol] = {
-                'company': stock_names.get(symbol, symbol),
-                'market_cap': market_cap_str,
-                'pe_ratio': round(info['trailingPE'], 2) if info.get('trailingPE') else 'N/A',
-                'eps': round(info['trailingEps'], 2) if info.get('trailingEps') else 'N/A',
-                'dividend_yield': (
-                    f"{info['dividendYield'] * 100:.2f}%"
-                    if info.get('dividendYield') else 'N/A'
-                ),
-                'sector': info.get('sector', 'N/A'),
-                'industry': info.get('industry', 'N/A')
-            }
-
-        except Exception as e:
-            fundamentals_data[symbol] = {
-                'company': stock_names.get(symbol, symbol),
-                'error': str(e)
-            }
+        fundamentals_data[symbol] = get_fundamentals_with_fallback(symbol, stock_names.get(symbol, symbol))
 
     return render_template(
         'fundamental.html',
@@ -600,12 +626,10 @@ def news():
 
             try:
                 news_items = get_stock_news(company)
-
                 news_data[symbol] = {
                     'company': company,
                     'news': news_items
                 }
-
             except Exception as e:
                 news_data[symbol] = {
                     'company': company,
