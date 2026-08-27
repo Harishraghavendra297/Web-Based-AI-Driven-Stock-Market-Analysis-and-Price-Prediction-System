@@ -124,11 +124,6 @@ display_names = {v: k for k, v in stock_names.items()}
 
 # Initialize sentiment analyzer
 sid = SentimentIntensityAnalyzer()
-import re
-from html import unescape
-from urllib.parse import quote_plus
-import feedparser
-
 
 def clean_summary(summary, title):
     if not summary:
@@ -140,7 +135,6 @@ def clean_summary(summary, title):
     summary = re.sub(r'\s+', ' ', summary).strip()      # normalize spaces
 
     return summary[:280]                                # ~2–3 lines
-
 
 def get_stock_news(company_name):
     query = quote_plus(f"{company_name} stock")
@@ -166,8 +160,6 @@ def get_stock_news(company_name):
     return news
 
 
-
-
 # ==================== DATABASE FUNCTIONS ====================
 def init_db():
     """Initialize database and create tables"""
@@ -177,7 +169,6 @@ def init_db():
     
     conn = sqlite3.connect('user_data.db')
 
-    
     # Create users table with all fields
     conn.execute('''
         CREATE TABLE IF NOT EXISTS users (
@@ -215,8 +206,25 @@ def init_db():
     print("=" * 50)
 
 def get_connection():
-    """Get database connection"""
-    return sqlite3.connect('user_data.db')
+    """Get database connection and ensure the table always exists"""
+    conn = sqlite3.connect('user_data.db')
+    
+    # Auto-create the table just in case the cloud server wiped it during sleep
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            mobile_number TEXT NOT NULL,
+            email TEXT NOT NULL,
+            occupation TEXT,
+            date_of_birth TEXT NOT NULL,
+            username TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    return conn
 
 def add_user(first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password):
     """Add new user to database"""
@@ -379,7 +387,6 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/main', methods=['GET', 'POST'])
-@app.route('/main', methods=['GET', 'POST'])
 def main_page():
     if 'user' not in session:
         return redirect(url_for('login'))
@@ -524,6 +531,7 @@ def main_page():
         context['lstm_error'] = str(e)
 
     return render_template('main.html', **context)
+
 @app.route('/fundamental', methods=['GET', 'POST'])
 def fundamental_data():
     """Fundamental data page"""
@@ -536,7 +544,7 @@ def fundamental_data():
         selected_names = request.form.getlist('stocks')
         selected_symbols = [
             display_names[name]
-            for name in selected_names
+            for name in display_names
             if name in display_names
         ]
 
@@ -686,6 +694,9 @@ def sentiment():
     return render_template('sentiment.html',
                          stocks=display_names,
                          sentiment_data=sentiment_data)
+
+# Call init_db() to ensure the database initializes immediately when Gunicorn boots up
+init_db()
 
 # ==================== RUN APPLICATION ====================
 if __name__ == "__main__":
