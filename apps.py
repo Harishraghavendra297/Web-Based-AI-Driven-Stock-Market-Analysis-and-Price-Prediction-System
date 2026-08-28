@@ -124,6 +124,12 @@ stock_names.update(NIFTY_50)
 # Reverse mapping for dropdown
 display_names = {v: k for k, v in stock_names.items()}
 
+# Helper to determine currency symbol dynamically
+def get_currency_symbol(symbol):
+    if symbol.endswith('.NS'):
+        return '₹'
+    return '$'
+
 # Initialize sentiment analyzer
 sid = SentimentIntensityAnalyzer()
 
@@ -131,12 +137,12 @@ def clean_summary(summary, title):
     if not summary:
         return ""
 
-    summary = unescape(summary)                     # remove &nbsp; etc
-    summary = re.sub(r'<[^>]+>', '', summary)           # strip HTML tags
-    summary = summary.replace(title, '')                # remove repeated title
-    summary = re.sub(r'\s+', ' ', summary).strip()      # normalize spaces
+    summary = unescape(summary)                     
+    summary = re.sub(r'<[^>]+>', '', summary)           
+    summary = summary.replace(title, '')                
+    summary = re.sub(r'\s+', ' ', summary).strip()      
 
-    return summary[:280]                                # ~2–3 lines
+    return summary[:280]                                
 
 def get_stock_news(company_name):
     query = quote_plus(f"{company_name} stock")
@@ -183,7 +189,10 @@ def get_stock_data_with_fallback(symbol, start_date, end_date):
     np.random.seed(sum([ord(c) for c in symbol])) 
     
     base_price = 150.0
-    if 'GOOG' in symbol or 'MSFT' in symbol: base_price = 300.0
+    if symbol.endswith('.NS'):
+        base_price = 1200.0 # Realistic Indian stock pricing baseline
+    elif 'GOOG' in symbol or 'MSFT' in symbol: 
+        base_price = 300.0
     
     returns = np.random.normal(0.0005, 0.015, len(dates))
     prices = base_price * np.exp(np.cumsum(returns))
@@ -199,6 +208,7 @@ def get_stock_data_with_fallback(symbol, start_date, end_date):
 
 def get_fundamentals_with_fallback(symbol, company_name):
     """Attempts to fetch real info, falls back to simulated stats if Yahoo throws 429"""
+    cur_sign = '₹' if symbol.endswith('.NS') else '$'
     try:
         custom_session = requests.Session()
         custom_session.headers.update({
@@ -211,9 +221,9 @@ def get_fundamentals_with_fallback(symbol, company_name):
 
         market_cap = info.get('marketCap')
         if isinstance(market_cap, (int, float)):
-            if market_cap >= 1e12: market_cap_str = f"${market_cap / 1e12:.2f}T"
-            elif market_cap >= 1e9: market_cap_str = f"${market_cap / 1e9:.2f}B"
-            else: market_cap_str = f"${market_cap / 1e6:.2f}M"
+            if market_cap >= 1e12: market_cap_str = f"{cur_sign}{market_cap / 1e12:.2f}T"
+            elif market_cap >= 1e9: market_cap_str = f"{cur_sign}{market_cap / 1e9:.2f}B"
+            else: market_cap_str = f"{cur_sign}{market_cap / 1e6:.2f}M"
         else:
             market_cap_str = "N/A"
 
@@ -227,11 +237,11 @@ def get_fundamentals_with_fallback(symbol, company_name):
             'industry': info.get('industry', 'N/A')
         }
     except Exception as e:
-        # --- FALLBACK: Generate realistic simulated stats ---
         np.random.seed(sum([ord(c) for c in symbol]))
+        mc_val = np.random.uniform(50, 2000) if not symbol.endswith('.NS') else np.random.uniform(100, 900000)
         return {
             'company': company_name + " (Simulated Mode)",
-            'market_cap': f"${np.random.uniform(50, 2000):.2f}B",
+            'market_cap': f"{cur_sign}{mc_val:.2f}B",
             'pe_ratio': round(np.random.uniform(10, 50), 2),
             'eps': round(np.random.uniform(2, 15), 2),
             'dividend_yield': f"{np.random.uniform(0.5, 4.5):.2f}%",
@@ -241,15 +251,13 @@ def get_fundamentals_with_fallback(symbol, company_name):
 
 
 # ==================== DATABASE FUNCTIONS (SUPABASE POSTGRESQL) ====================
-# Supabase connection string configured from user settings
 SUPABASE_DB_URL = 'postgresql://postgres.lyaptqtkyeumynygcnvm:Idontknow.1%40hari@aws-0-ap-south-1.pooler.supabase.com:5432/postgres'
+
 def init_db():
     print("=" * 50)
     print("INITIALIZING SUPABASE DATABASE")
     print("=" * 50)
     
-    conn = sqlite3.connect('user_data.db') if 'sqlite' in SUPABASE_DB_URL else None
-    # For Supabase PostgreSQL, we use psycopg2
     import psycopg2
     conn = psycopg2.connect(SUPABASE_DB_URL)
 
@@ -265,6 +273,16 @@ def init_db():
                 date_of_birth TEXT NOT NULL,
                 username TEXT NOT NULL UNIQUE,
                 password TEXT NOT NULL
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS portfolio (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                shares NUMERIC NOT NULL,
+                purchase_price NUMERIC NOT NULL,
+                added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
     
@@ -460,6 +478,94 @@ def view_users():
     html += "</ul>"
     return html
 
+@app.route('/portfolio', methods=['GET', 'POST'])
+def portfolio():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    
+    username = session['user']
+    conn = get_connection()
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            stock_choice = request.form.get('stock')
+            symbol = display_names.get(stock_choice, stock_choice)
+            try:
+                shares = float(request.form.get('shares', 0))
+                purchase_price = float(request.form.get('purchase_price', 0))
+                if shares > 0 and purchase_price > 0:
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            'INSERT INTO portfolio (username, symbol, shares, purchase_price) VALUES (%s, %s, %s, %s)',
+                            (username, symbol, shares, purchase_price)
+                        )
+                    conn.commit()
+                    flash('Stock added to your mobile-friendly portfolio successfully!', 'success')
+                else:
+                    flash('Shares and purchase price must be greater than zero.', 'error')
+            except ValueError:
+                flash('Invalid numeric input for shares or price.', 'error')
+        elif action == 'delete':
+            item_id = request.form.get('item_id')
+            with conn.cursor() as cursor:
+                cursor.execute('DELETE FROM portfolio WHERE id = %s AND username = %s', (item_id, username))
+            conn.commit()
+            flash('Portfolio holding removed.', 'info')
+
+    # Fetch user portfolio items
+    with conn.cursor() as cursor:
+        cursor.execute('SELECT id, symbol, shares, purchase_price FROM portfolio WHERE username = %s', (username,))
+        rows = cursor.fetchall()
+    conn.close()
+
+    portfolio_items = []
+    total_portfolio_value = 0.0
+    total_invested = 0.0
+
+    for row in rows:
+        item_id, symbol, shares, purchase_price = row
+        end_str = datetime.now().strftime('%Y-%m-%d')
+        start_str = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+        df_temp, _ = get_stock_data_with_fallback(symbol, start_str, end_str)
+        
+        current_price = float(df_temp['Close'].iloc[-1]) if not df_temp.empty else float(purchase_price)
+        
+        holding_value = shares * current_price
+        invested_value = shares * float(purchase_price)
+        pnl = holding_value - invested_value
+        pnl_pct = (pnl / invested_value * 100) if invested_value > 0 else 0.0
+
+        total_portfolio_value += holding_value
+        total_invested += invested_value
+
+        cur_sign = get_currency_symbol(symbol)
+        portfolio_items.append({
+            'id': item_id,
+            'symbol': symbol,
+            'name': stock_names.get(symbol, symbol),
+            'shares': shares,
+            'purchase_price': round(float(purchase_price), 2),
+            'current_price': round(current_price, 2),
+            'holding_value': round(holding_value, 2),
+            'pnl': round(pnl, 2),
+            'pnl_pct': round(pnl_pct, 2),
+            'currency': cur_sign
+        })
+
+    total_pnl = total_portfolio_value - total_invested
+    total_pnl_pct = (total_pnl / total_invested * 100) if total_invested > 0 else 0.0
+
+    return render_template(
+        'portfolio.html',
+        stocks=display_names,
+        portfolio_items=portfolio_items,
+        total_portfolio_value=round(total_portfolio_value, 2),
+        total_invested=round(total_invested, 2),
+        total_pnl=round(total_pnl, 2),
+        total_pnl_pct=round(total_pnl_pct, 2)
+    )
+
 @app.route('/main', methods=['GET', 'POST'])
 def main_page():
     if 'user' not in session:
@@ -474,6 +580,8 @@ def main_page():
     start_date = request.form.get('start_date', default_start)
     end_date = request.form.get('end_date', default_end)
 
+    currency_symbol = get_currency_symbol(selected_symbol)
+
     context = {
         'username': session['user'],
         'stocks': display_names,
@@ -481,6 +589,7 @@ def main_page():
         'selected_symbol': selected_symbol,
         'start_date': start_date,
         'end_date': end_date,
+        'currency_symbol': currency_symbol,
         'has_data': False,
         'price_data': None,
         'lr_data': None,
@@ -673,7 +782,7 @@ def sentiment():
                 
                 feed = feedparser.parse(rss_url)
                 
-                sentiments = []
+                z_sentiments = []
                 pos = neg = neu = 0
                 
                 for entry in feed.entries[:10]:
@@ -690,7 +799,7 @@ def sentiment():
                     else:
                         neu += 1
                     
-                    sentiments.append({
+                    z_sentiments.append({
                         'title': text[:100] + "..." if len(text) > 100 else text,
                         'sentiment': sentiment,
                         'score': round(score, 3)
@@ -698,7 +807,7 @@ def sentiment():
                 
                 sentiment_data[symbol] = {
                     'company': company,
-                    'sentiments': sentiments,
+                    'sentiments': z_sentiments,
                     'summary': {
                         'positive': pos,
                         'negative': neg,
