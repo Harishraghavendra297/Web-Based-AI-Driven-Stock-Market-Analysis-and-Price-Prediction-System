@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block title %} | Login{% endblock %}
 
 {% block content %}
 <style>
@@ -68,7 +69,7 @@
 
 <div class="container">
     <div class="row justify-content-center align-items-center" style="min-height:90vh;">
-        <div class="col-12 col-md-5 col-lg-4 px-3">
+        <div class="col-md-5 col-lg-4">
 
             <div class="glow-card">
                 <div class="glow-inner p-4 text-center">
@@ -80,17 +81,17 @@
                              width="60">
                     </div>
 
-                    <h3 class="fw-bold text-info fs-4">
+                    <h3 class="fw-bold text-info">
                         AI Stock Insight
                     </h3>
-                    <p class="text-muted small mb-4">
+                    <p class="text-muted mb-4">
                         Smart Market Analysis & Prediction
                     </p>
 
                     <form method="POST" action="{{ url_for('login') }}">
 
                         <div class="mb-3 text-start">
-                            <label class="form-label text-muted small">Username</label>
+                            <label class="form-label text-muted">Username</label>
                             <input type="text"
                                    class="form-control form-control-lg"
                                    name="username"
@@ -98,7 +99,7 @@
                         </div>
 
                         <div class="mb-4 text-start password-wrapper">
-                            <label class="form-label text-muted small">Password</label>
+                            <label class="form-label text-muted">Password</label>
                             <input type="password"
                                    class="form-control form-control-lg"
                                    name="password"
@@ -114,7 +115,7 @@
                     </form>
 
                     <div class="text-center mt-4">
-                        <p class="text-muted small mb-1">New here?</p>
+                        <p class="text-muted mb-1">New here?</p>
                         <a href="{{ url_for('signup') }}"
                            class="btn btn-outline-secondary w-100 rounded-3">
                             Create Account
