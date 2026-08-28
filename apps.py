@@ -39,7 +39,6 @@ nltk.download('vader_lexicon', quiet=True)
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-key-only')
 
-# Stock data dictionaries
 US_STOCKS = {
     'GOOG': 'Alphabet Inc. (US)',
     'AAPL': 'Apple Inc. (US)',
@@ -115,62 +114,46 @@ NIFTY_50 = {
     "UPL.NS": "UPL (NIFTY)"
 }
 
-# Combine all stocks
 stock_names = {}
 stock_names.update(US_STOCKS)
 stock_names.update(SENSEX_30)
 stock_names.update(NIFTY_50)
 
-# Reverse mapping for dropdown
 display_names = {v: k for k, v in stock_names.items()}
 
-# Helper to determine currency symbol dynamically
 def get_currency_symbol(symbol):
     if symbol.endswith('.NS'):
         return '₹'
     return '$'
 
-# Initialize sentiment analyzer
 sid = SentimentIntensityAnalyzer()
 
 def clean_summary(summary, title):
     if not summary:
         return ""
-
-    summary = unescape(summary)                     
-    summary = re.sub(r'<[^>]+>', '', summary)           
-    summary = summary.replace(title, '')                
-    summary = re.sub(r'\s+', ' ', summary).strip()      
-
-    return summary[:280]                                
+    summary = unescape(summary)
+    summary = re.sub(r'<[^>]+>', '', summary)
+    summary = summary.replace(title, '')
+    summary = re.sub(r'\s+', ' ', summary).strip()
+    return summary[:280]
 
 def get_stock_news(company_name):
     query = quote_plus(f"{company_name} stock")
-    rss_url = (
-        f"https://news.google.com/rss/search?"
-        f"q={query}&hl=en-IN&gl=IN&ceid=IN:en"
-    )
-
+    rss_url = f"https://news.google.com/rss/search?q={query}&hl=en-IN&gl=IN&ceid=IN:en"
     feed = feedparser.parse(rss_url)
-
     news = []
     for entry in feed.entries[:8]:
         title = entry.title
         summary = clean_summary(entry.get("summary", ""), title)
-
         news.append({
             "title": title,
             "link": entry.link,
             "published": entry.get("published", ""),
             "summary": summary or "Click to read the full article."
         })
-
     return news
 
-
-# ==================== DATA FALLBACK GENERATORS ====================
 def get_stock_data_with_fallback(symbol, start_date, end_date):
-    """Attempts to fetch real data, falls back to simulated data if Yahoo throws 429"""
     try:
         custom_session = requests.Session()
         custom_session.headers.update({
@@ -184,15 +167,11 @@ def get_stock_data_with_fallback(symbol, start_date, end_date):
     except Exception as e:
         print(f"Yahoo Finance blocked request: {e}")
     
-    # --- FALLBACK: Generate realistic simulated data ---
     dates = pd.date_range(start=start_date, end=end_date, freq='B')
     np.random.seed(sum([ord(c) for c in symbol])) 
     
-    base_price = 150.0
-    if symbol.endswith('.NS'):
-        base_price = 1200.0 # Realistic Indian stock pricing baseline
-    elif 'GOOG' in symbol or 'MSFT' in symbol: 
-        base_price = 300.0
+    base_price = 1200.0 if symbol.endswith('.NS') else 150.0
+    if 'GOOG' in symbol or 'MSFT' in symbol: base_price = 300.0
     
     returns = np.random.normal(0.0005, 0.015, len(dates))
     prices = base_price * np.exp(np.cumsum(returns))
@@ -207,7 +186,6 @@ def get_stock_data_with_fallback(symbol, start_date, end_date):
     return df, True 
 
 def get_fundamentals_with_fallback(symbol, company_name):
-    """Attempts to fetch real info, falls back to simulated stats if Yahoo throws 429"""
     cur_sign = '₹' if symbol.endswith('.NS') else '$'
     try:
         custom_session = requests.Session()
@@ -249,64 +227,44 @@ def get_fundamentals_with_fallback(symbol, company_name):
             'industry': 'Enterprise'
         }
 
-
-# ==================== DATABASE FUNCTIONS (SUPABASE POSTGRESQL) ====================
 SUPABASE_DB_URL = 'postgresql://postgres.lyaptqtkyeumynygcnvm:Idontknow.1%40hari@aws-0-ap-south-1.pooler.supabase.com:5432/postgres'
 
 def init_db():
-    print("=" * 50)
-    print("INITIALIZING SUPABASE DATABASE")
-    print("=" * 50)
-    
     import psycopg2
-    conn = psycopg2.connect(SUPABASE_DB_URL)
-
-    with conn.cursor() as cursor:
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                first_name TEXT NOT NULL,
-                last_name TEXT NOT NULL,
-                mobile_number TEXT NOT NULL,
-                email TEXT NOT NULL,
-                occupation TEXT,
-                date_of_birth TEXT NOT NULL,
-                username TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS portfolio (
-                id SERIAL PRIMARY KEY,
-                username TEXT NOT NULL,
-                symbol TEXT NOT NULL,
-                shares NUMERIC NOT NULL,
-                purchase_price NUMERIC NOT NULL,
-                added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-    
     try:
+        conn = psycopg2.connect(SUPABASE_DB_URL)
         with conn.cursor() as cursor:
             cursor.execute('''
-                INSERT INTO users 
-                (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (username) DO NOTHING
-            ''', ('Test', 'User', '1234567890', 'test@email.com', 'Student', '2000-01-01', 'test', 'test123'))
-        print("✓ Added test user: test/test123")
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    first_name TEXT NOT NULL,
+                    last_name TEXT NOT NULL,
+                    mobile_number TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    occupation TEXT,
+                    date_of_birth TEXT NOT NULL,
+                    username TEXT NOT NULL UNIQUE,
+                    password TEXT NOT NULL
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS portfolio (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    shares NUMERIC NOT NULL,
+                    purchase_price NUMERIC NOT NULL,
+                    added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+        conn.commit()
+        conn.close()
     except Exception as e:
-        print(f"Test user insert note: {e}")
-    
-    conn.commit()
-    conn.close()
-    print("✅ Supabase Database tables initialized successfully.")
-    print("=" * 50)
+        print(f"Database init note: {e}")
 
 def get_connection():
     import psycopg2
-    conn = psycopg2.connect(SUPABASE_DB_URL)
-    return conn
+    return psycopg2.connect(SUPABASE_DB_URL)
 
 def add_user(first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password):
     conn = get_connection()
@@ -317,10 +275,9 @@ def add_user(first_name, last_name, mobile_number, email, occupation, date_of_bi
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password))
         conn.commit()
-        print(f"✅ User '{username}' added successfully to Supabase")
         return True
     except Exception as e:
-        print(f"❌ Error adding user: {e}")
+        print(f"Error adding user: {e}")
         return False
     finally:
         conn.close()
@@ -330,36 +287,26 @@ def authenticate_user(username, password):
     try:
         with conn.cursor() as cursor:
             cursor.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
-            user = cursor.fetchone()
-        return user
+            return cursor.fetchone()
     finally:
         conn.close()
 
-# ==================== LSTM PREDICTION ====================
 def lstm_predict(data, n_future=7, n_past=60, epochs=10):
     if not TENSORFLOW_AVAILABLE:
         last_price = data['Close'].iloc[-1]
         import random
-        predictions = []
-        for i in range(n_future):
-            predictions.append(last_price * (1 + random.uniform(-0.02, 0.03)))
-        return predictions
-    
+        return [last_price * (1 + random.uniform(-0.02, 0.03)) for _ in range(n_future)]
     try:
         close_data = data['Close'].values.reshape(-1,1)
-        if len(close_data) > 1000:
-            close_data = close_data[-1000:]
-
+        if len(close_data) > 1000: close_data = close_data[-1000:]
         scaler = MinMaxScaler()
         scaled_data = scaler.fit_transform(close_data)
-        
         X, y = [], []
         for i in range(n_past, len(scaled_data)):
             X.append(scaled_data[i-n_past:i, 0])
             y.append(scaled_data[i, 0])
         X, y = np.array(X), np.array(y)
         X = np.reshape(X, (X.shape[0], X.shape[1], 1))
-
         model = Sequential()
         model.add(LSTM(50, return_sequences=True, input_shape=(X.shape[1],1)))
         model.add(Dropout(0.2))
@@ -367,58 +314,44 @@ def lstm_predict(data, n_future=7, n_past=60, epochs=10):
         model.add(Dropout(0.2))
         model.add(Dense(1))
         model.compile(optimizer='adam', loss='mean_squared_error')
-
         model.fit(X, y, epochs=epochs, batch_size=32, verbose=0)
-
         predicted_prices = []
         last_sequence = scaled_data[-n_past:]
         for _ in range(n_future):
             pred = model.predict(last_sequence.reshape(1, n_past, 1), verbose=0)
             predicted_prices.append(pred[0,0])
             last_sequence = np.append(last_sequence[1:], pred, axis=0)
-
         predicted_prices = scaler.inverse_transform(np.array(predicted_prices).reshape(-1,1))
         return predicted_prices.flatten().tolist()
     except Exception as e:
-        print(f"LSTM prediction error: {e}")
         last_price = data['Close'].iloc[-1]
         return [last_price * (1 + i * 0.01) for i in range(n_future)]
 
-# ==================== ROUTES ====================
-
 @app.route('/')
 def index():
-    if 'user' in session:
-        return redirect(url_for('main_page'))
+    if 'user' in session: return redirect(url_for('main_page'))
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if 'user' in session:
-        return redirect(url_for('main_page'))
-    
+    if 'user' in session: return redirect(url_for('main_page'))
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
-        
         if not username or not password:
             flash('Please enter both username and password', 'error')
         else:
             user = authenticate_user(username, password)
             if user:
                 session['user'] = username
-                flash(f'Welcome back, {username}!', 'success')
                 return redirect(url_for('main_page'))
             else:
                 flash('Invalid username or password', 'error')
-    
     return render_template('login.html')
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
-    if 'user' in session:
-        return redirect(url_for('main_page'))
-    
+    if 'user' in session: return redirect(url_for('main_page'))
     if request.method == 'POST':
         first_name = request.form.get('first_name', '').strip()
         last_name = request.form.get('last_name', '').strip()
@@ -429,63 +362,26 @@ def signup():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         confirm_password = request.form.get('confirm_password', '').strip()
-        
-        errors = []
-        if not all([first_name, last_name, mobile_number, email, username, password, confirm_password]):
-            errors.append('Please fill all required fields')
         if password != confirm_password:
-            errors.append('Passwords do not match')
-        if len(password) < 6:
-            errors.append('Password must be at least 6 characters')
-        
-        if errors:
-            for error in errors:
-                flash(error, 'error')
+            flash('Passwords do not match', 'error')
         else:
-            success = add_user(first_name, last_name, mobile_number, email, 
-                             occupation, date_of_birth, username, password)
-            if success:
+            if add_user(first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password):
                 flash('Account created successfully! Please login.', 'success')
                 return redirect(url_for('login'))
             else:
-                flash('Username already exists or database error occurred.', 'error')
-    
+                flash('Username already exists or database error.', 'error')
     return render_template('signup.html')
 
 @app.route('/logout')
 def logout():
-    username = session.get('user', 'User')
     session.pop('user', None)
-    flash(f'Goodbye, {username}! You have been logged out.', 'info')
     return redirect(url_for('login'))
-
-@app.route('/admin/users')
-def view_users():
-    if session.get('user') != 'test': 
-        return "Access Denied", 403
-        
-    conn = get_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute('SELECT id, first_name, last_name, email, username FROM users')
-            users = cursor.fetchall()
-    finally:
-        conn.close()
-    
-    html = "<h1>Registered Users on Supabase</h1><ul>"
-    for user in users:
-        html += f"<li>ID: {user[0]} | Name: {user[1]} {user[2]} | Email: {user[3]} | Username: {user[4]}</li>"
-    html += "</ul>"
-    return html
 
 @app.route('/portfolio', methods=['GET', 'POST'])
 def portfolio():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-    
+    if 'user' not in session: return redirect(url_for('login'))
     username = session['user']
     conn = get_connection()
-
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'add':
@@ -496,338 +392,149 @@ def portfolio():
                 purchase_price = float(request.form.get('purchase_price', 0))
                 if shares > 0 and purchase_price > 0:
                     with conn.cursor() as cursor:
-                        cursor.execute(
-                            'INSERT INTO portfolio (username, symbol, shares, purchase_price) VALUES (%s, %s, %s, %s)',
-                            (username, symbol, shares, purchase_price)
-                        )
+                        cursor.execute('INSERT INTO portfolio (username, symbol, shares, purchase_price) VALUES (%s, %s, %s, %s)', (username, symbol, shares, purchase_price))
                     conn.commit()
-                    flash('Stock added to your mobile-friendly portfolio successfully!', 'success')
-                else:
-                    flash('Shares and purchase price must be greater than zero.', 'error')
             except ValueError:
-                flash('Invalid numeric input for shares or price.', 'error')
+                pass
         elif action == 'delete':
             item_id = request.form.get('item_id')
             with conn.cursor() as cursor:
                 cursor.execute('DELETE FROM portfolio WHERE id = %s AND username = %s', (item_id, username))
             conn.commit()
-            flash('Portfolio holding removed.', 'info')
 
-    # Fetch user portfolio items
     with conn.cursor() as cursor:
         cursor.execute('SELECT id, symbol, shares, purchase_price FROM portfolio WHERE username = %s', (username,))
         rows = cursor.fetchall()
     conn.close()
 
     portfolio_items = []
-    total_portfolio_value = 0.0
-    total_invested = 0.0
-
+    total_val, total_inv = 0.0, 0.0
     for row in rows:
         item_id, symbol, shares, purchase_price = row
-        end_str = datetime.now().strftime('%Y-%m-%d')
-        start_str = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
-        df_temp, _ = get_stock_data_with_fallback(symbol, start_str, end_str)
-        
+        df_temp, _ = get_stock_data_with_fallback(symbol, (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d'))
         current_price = float(df_temp['Close'].iloc[-1]) if not df_temp.empty else float(purchase_price)
-        
-        holding_value = shares * current_price
-        invested_value = shares * float(purchase_price)
-        pnl = holding_value - invested_value
-        pnl_pct = (pnl / invested_value * 100) if invested_value > 0 else 0.0
-
-        total_portfolio_value += holding_value
-        total_invested += invested_value
-
-        cur_sign = get_currency_symbol(symbol)
+        h_val = shares * current_price
+        i_val = shares * float(purchase_price)
+        pnl = h_val - i_val
+        pnl_pct = (pnl / i_val * 100) if i_val > 0 else 0.0
+        total_val += h_val
+        total_inv += i_val
         portfolio_items.append({
-            'id': item_id,
-            'symbol': symbol,
-            'name': stock_names.get(symbol, symbol),
-            'shares': shares,
-            'purchase_price': round(float(purchase_price), 2),
-            'current_price': round(current_price, 2),
-            'holding_value': round(holding_value, 2),
-            'pnl': round(pnl, 2),
-            'pnl_pct': round(pnl_pct, 2),
-            'currency': cur_sign
+            'id': item_id, 'symbol': symbol, 'name': stock_names.get(symbol, symbol),
+            'shares': shares, 'purchase_price': round(float(purchase_price), 2),
+            'current_price': round(current_price, 2), 'holding_value': round(h_val, 2),
+            'pnl': round(pnl, 2), 'pnl_pct': round(pnl_pct, 2), 'currency': get_currency_symbol(symbol)
         })
-
-    total_pnl = total_portfolio_value - total_invested
-    total_pnl_pct = (total_pnl / total_invested * 100) if total_invested > 0 else 0.0
-
-    return render_template(
-        'portfolio.html',
-        stocks=display_names,
-        portfolio_items=portfolio_items,
-        total_portfolio_value=round(total_portfolio_value, 2),
-        total_invested=round(total_invested, 2),
-        total_pnl=round(total_pnl, 2),
-        total_pnl_pct=round(total_pnl_pct, 2)
-    )
+    total_pnl = total_val - total_inv
+    total_pnl_pct = (total_pnl / total_inv * 100) if total_inv > 0 else 0.0
+    return render_template('portfolio.html', stocks=display_names, portfolio_items=portfolio_items,
+                           total_portfolio_value=round(total_val, 2), total_invested=round(total_inv, 2),
+                           total_pnl=round(total_pnl, 2), total_pnl_pct=round(total_pnl_pct, 2))
 
 @app.route('/main', methods=['GET', 'POST'])
 def main_page():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-
+    if 'user' not in session: return redirect(url_for('login'))
     selected_display_name = request.form.get('stock', 'Apple Inc. (US)')
     selected_symbol = display_names.get(selected_display_name, 'AAPL')
-
     default_start = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
     default_end = datetime.now().strftime('%Y-%m-%d')
-
     start_date = request.form.get('start_date', default_start)
     end_date = request.form.get('end_date', default_end)
-
     currency_symbol = get_currency_symbol(selected_symbol)
 
     context = {
-        'username': session['user'],
-        'stocks': display_names,
-        'selected_stock': selected_display_name,
-        'selected_symbol': selected_symbol,
-        'start_date': start_date,
-        'end_date': end_date,
-        'currency_symbol': currency_symbol,
-        'has_data': False,
-        'price_data': None,
-        'lr_data': None,
-        'lstm_data': None,
-        'recent_data': None,
-        'current_price': None,
-        'last_date': None
+        'username': session['user'], 'stocks': display_names, 'selected_stock': selected_display_name,
+        'selected_symbol': selected_symbol, 'start_date': start_date, 'end_date': end_date,
+        'currency_symbol': currency_symbol, 'has_data': False, 'price_data': None,
+        'lr_data': None, 'lstm_data': None, 'recent_data': None, 'current_price': None, 'last_date': None
     }
 
     df, is_simulated = get_stock_data_with_fallback(selected_symbol, start_date, end_date)
-
-    if df.empty:
-        flash(f'No data available for {selected_display_name}', 'warning')
-        return render_template('main.html', **context)
-        
-    if is_simulated:
-        flash(f'Server is in Demo Mode. Displaying simulated market data for {selected_display_name} to bypass Yahoo restrictions.', 'info')
+    if df.empty: return render_template('main.html', **context)
 
     context['has_data'] = True
     close_prices = df['Close']
-
-    price_data = {
-        'dates': df.index.strftime('%Y-%m-%d').tolist(),
-        'prices': close_prices.tolist()
-    }
-    context['price_data'] = json.dumps(price_data)
-
+    context['price_data'] = json.dumps({'dates': df.index.strftime('%Y-%m-%d').tolist(), 'prices': close_prices.tolist()})
     context['current_price'] = round(float(close_prices.iloc[-1]), 2)
     context['last_date'] = df.index[-1].strftime('%Y-%m-%d')
 
-    recent_data = []
-    for idx, row in df.tail(10).iterrows():
-        recent_data.append({
-            'Date': idx.strftime('%Y-%m-%d'),
-            'Open': round(float(row['Open']), 2),
-            'High': round(float(row['High']), 2),
-            'Low': round(float(row['Low']), 2),
-            'Close': round(float(row['Close']), 2),
-            'Volume': int(row['Volume'])
-        })
+    context['recent_data'] = [{
+        'Date': idx.strftime('%Y-%m-%d'), 'Open': round(float(row['Open']), 2),
+        'High': round(float(row['High']), 2), 'Low': round(float(row['Low']), 2),
+        'Close': round(float(row['Close']), 2), 'Volume': int(row['Volume'])
+    } for idx, row in df.tail(10).iterrows()]
 
-    context['recent_data'] = recent_data
-
-    # ---- Linear Regression ----
     try:
         df_lr = df.copy()
         df_lr['Day'] = range(len(df_lr))
-
-        X = df_lr[['Day']].values
-        y = close_prices.values
-
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, shuffle=False
-        )
-
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-
-        y_pred = model.predict(X_test)
-
-        lr_data = {
+        X, y = df_lr[['Day']].values, close_prices.values
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+        model = LinearRegression().fit(X_train, y_train)
+        context['lr_data'] = json.dumps({
             'dates': df_lr.index[-len(y_test):].strftime('%Y-%m-%d').tolist(),
-            'actual': y_test.tolist(),
-            'predicted': y_pred.tolist()
-        }
+            'actual': y_test.tolist(), 'predicted': model.predict(X_test).tolist()
+        })
+    except Exception: pass
 
-        context['lr_data'] = json.dumps(lr_data)
-
-    except Exception as e:
-        context['lr_error'] = str(e)
-
-    # ---- LSTM Prediction ----
     try:
         lstm_predictions = lstm_predict(df)
-
-        future_dates = pd.date_range(
-            start=df.index[-1] + timedelta(days=1),
-            periods=7
-        ).strftime('%Y-%m-%d').tolist()
-
-        lstm_data = {
+        future_dates = pd.date_range(start=df.index[-1] + timedelta(days=1), periods=7).strftime('%Y-%m-%d').tolist()
+        context['lstm_data'] = json.dumps({
             'historical_dates': df.index[-30:].strftime('%Y-%m-%d').tolist(),
             'historical_prices': close_prices[-30:].tolist(),
-            'future_dates': future_dates,
-            'future_prices': [round(p, 2) for p in lstm_predictions]
-        }
-
-        context['lstm_data'] = json.dumps(lstm_data)
-
+            'future_dates': future_dates, 'future_prices': [round(p, 2) for p in lstm_predictions]
+        })
         lstm_table = []
         last_price = float(close_prices.iloc[-1])
-
         for d, p in zip(future_dates, lstm_predictions):
             change = ((p - last_price) / last_price) * 100
-            lstm_table.append({
-                'date': d,
-                'price': round(p, 2),
-                'change': round(change, 2)
-            })
+            lstm_table.append({'date': d, 'price': round(p, 2), 'change': round(change, 2)})
             last_price = p
-
         context['lstm_table_data'] = lstm_table
-
-    except Exception as e:
-        context['lstm_error'] = str(e)
+    except Exception: pass
 
     return render_template('main.html', **context)
 
 @app.route('/fundamental', methods=['GET', 'POST'])
 def fundamental_data():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-
-    selected_symbols = []
-
-    if request.method == 'POST':
-        selected_names = request.form.getlist('stocks')
-        selected_symbols = [
-            display_names[name]
-            for name in selected_names
-            if name in display_names
-        ]
-
-    fundamentals_data = {}
-
-    for symbol in selected_symbols:
-        fundamentals_data[symbol] = get_fundamentals_with_fallback(symbol, stock_names.get(symbol, symbol))
-
-    return render_template(
-        'fundamental.html',
-        stocks=display_names,
-        fundamentals=fundamentals_data
-    )
+    if 'user' not in session: return redirect(url_for('login'))
+    selected_symbols = [display_names[name] for name in request.form.getlist('stocks') if name in display_names] if request.method == 'POST' else []
+    fundamentals_data = {sym: get_fundamentals_with_fallback(sym, stock_names.get(sym, sym)) for sym in selected_symbols}
+    return render_template('fundamental.html', stocks=display_names, fundamentals=fundamentals_data)
 
 @app.route('/news', methods=['GET', 'POST'])
 def news():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-
+    if 'user' not in session: return redirect(url_for('login'))
     news_data = {}
-
     if request.method == 'POST':
-        selected_names = request.form.getlist('stocks')
-        selected_symbols = [
-            display_names[name]
-            for name in selected_names
-            if name in display_names
-        ]
-
-        for symbol in selected_symbols:
-            company = stock_names.get(symbol, symbol)
-
-            try:
-                news_items = get_stock_news(company)
-                news_data[symbol] = {
-                    'company': company,
-                    'news': news_items
-                }
-            except Exception as e:
-                news_data[symbol] = {
-                    'company': company,
-                    'error': str(e)
-                }
-
-    return render_template(
-        'news.html',
-        stocks=display_names,
-        news_data=news_data
-    )
+        for sym in [display_names[n] for n in request.form.getlist('stocks') if n in display_names]:
+            comp = stock_names.get(sym, sym)
+            try: news_data[sym] = {'company': comp, 'news': get_stock_news(comp)}
+            except Exception as e: news_data[sym] = {'company': comp, 'error': str(e)}
+    return render_template('news.html', stocks=display_names, news_data=news_data)
 
 @app.route('/sentiment', methods=['GET', 'POST'])
 def sentiment():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-    
-    selected_symbols = []
+    if 'user' not in session: return redirect(url_for('login'))
     sentiment_data = {}
-    
     if request.method == 'POST':
-        selected_names = request.form.getlist('stocks')
-        selected_symbols = [display_names[n] for n in selected_names if n in display_names]
-        
-        for symbol in selected_symbols:
+        for sym in [display_names[n] for n in request.form.getlist('stocks') if n in display_names]:
             try:
-                company = stock_names.get(symbol, symbol)
-                company_clean = company.split("(")[0].strip()
-                
-                query = company_clean.replace(" ", "+")
-                rss_url = f"https://news.google.com/rss/search?q={query}+stock"
-                
-                feed = feedparser.parse(rss_url)
-                
-                z_sentiments = []
-                pos = neg = neu = 0
-                
+                comp = stock_names.get(sym, sym).split("(")[0].strip()
+                feed = feedparser.parse(f"https://news.google.com/rss/search?q={comp.replace(' ', '+')}+stock")
+                sents, pos, neg, neu = [], 0, 0, 0
                 for entry in feed.entries[:10]:
-                    text = entry.title
-                    score = sid.polarity_scores(text)["compound"]
-                    
-                    sentiment = "Neutral"
-                    if score >= 0.05:
-                        sentiment = "Positive"
-                        pos += 1
-                    elif score <= -0.05:
-                        sentiment = "Negative"
-                        neg += 1
-                    else:
-                        neu += 1
-                    
-                    z_sentiments.append({
-                        'title': text[:100] + "..." if len(text) > 100 else text,
-                        'sentiment': sentiment,
-                        'score': round(score, 3)
-                    })
-                
-                sentiment_data[symbol] = {
-                    'company': company,
-                    'sentiments': z_sentiments,
-                    'summary': {
-                        'positive': pos,
-                        'negative': neg,
-                        'neutral': neu,
-                        'overall': 'Positive' if pos > neg else 'Negative' if neg > pos else 'Neutral'
-                    }
-                }
-            except Exception as e:
-                sentiment_data[symbol] = {'error': str(e)}
-    
-    return render_template('sentiment.html',
-                           stocks=display_names,
-                           sentiment_data=sentiment_data)
+                    score = sid.polarity_scores(entry.title)["compound"]
+                    stype = "Positive" if score >= 0.05 else ("Negative" if score <= -0.05 else "Neutral")
+                    if stype == "Positive": pos += 1
+                    elif stype == "Negative": neg += 1
+                    else: neu += 1
+                    sents.append({'title': entry.title[:100], 'sentiment': stype, 'score': round(score, 3)})
+                sentiment_data[sym] = {'company': comp, 'sentiments': sents, 'summary': {'positive': pos, 'negative': neg, 'neutral': neu, 'overall': 'Positive' if pos > neg else ('Negative' if neg > pos else 'Neutral')}}
+            except Exception as e: sentiment_data[sym] = {'error': str(e)}
+    return render_template('sentiment.html', stocks=display_names, sentiment_data=sentiment_data)
 
 init_db()
 
 if __name__ == "__main__":
-    app.run(
-        host="127.0.0.1",
-        port=5000,
-        debug=True,
-        use_reloader=False
-    )
+    app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=False)
