@@ -131,7 +131,7 @@ def clean_summary(summary, title):
     if not summary:
         return ""
 
-    summary = unescape(summary)                         # remove &nbsp; etc
+    summary = unescape(summary)                     # remove &nbsp; etc
     summary = re.sub(r'<[^>]+>', '', summary)           # strip HTML tags
     summary = summary.replace(title, '')                # remove repeated title
     summary = re.sub(r'\s+', ' ', summary).strip()      # normalize spaces
@@ -240,79 +240,68 @@ def get_fundamentals_with_fallback(symbol, company_name):
         }
 
 
-# ==================== DATABASE FUNCTIONS ====================
+# ==================== DATABASE FUNCTIONS (SUPABASE POSTGRESQL) ====================
+# Supabase connection string configured from user settings
+SUPABASE_DB_URL = 'postgresql://postgres:YOUR_ACTUAL_PASSWORD@db.lyaptqtkyeumynygcnvm.supabase.co:5432/postgres'
+
 def init_db():
     print("=" * 50)
-    print("INITIALIZING DATABASE")
+    print("INITIALIZING SUPABASE DATABASE")
     print("=" * 50)
     
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect('user_data.db') if 'sqlite' in SUPABASE_DB_URL else None
+    # For Supabase PostgreSQL, we use psycopg2
+    import psycopg2
+    conn = psycopg2.connect(SUPABASE_DB_URL)
 
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            mobile_number TEXT NOT NULL,
-            email TEXT NOT NULL,
-            occupation TEXT,
-            date_of_birth TEXT NOT NULL,
-            username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL
-        )
-    ''')
+    with conn.cursor() as cursor:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                mobile_number TEXT NOT NULL,
+                email TEXT NOT NULL,
+                occupation TEXT,
+                date_of_birth TEXT NOT NULL,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL
+            )
+        ''')
     
     try:
-        conn.execute('''
-            INSERT OR IGNORE INTO users 
-            (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', ('Test', 'User', '1234567890', 'test@email.com', 'Student', '2000-01-01', 'test', 'test123'))
+        with conn.cursor() as cursor:
+            cursor.execute('''
+                INSERT INTO users 
+                (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (username) DO NOTHING
+            ''', ('Test', 'User', '1234567890', 'test@email.com', 'Student', '2000-01-01', 'test', 'test123'))
         print("✓ Added test user: test/test123")
-    except:
-        pass
+    except Exception as e:
+        print(f"Test user insert note: {e}")
     
     conn.commit()
     conn.close()
-    
-    if os.path.exists('user_data.db'):
-        file_size = os.path.getsize('user_data.db')
-        print(f"✅ Database created: user_data.db ({file_size} bytes)")
-    else:
-        print("❌ Database file not created!")
+    print("✅ Supabase Database tables initialized successfully.")
     print("=" * 50)
 
 def get_connection():
-    conn = sqlite3.connect('user_data.db')
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            mobile_number TEXT NOT NULL,
-            email TEXT NOT NULL,
-            occupation TEXT,
-            date_of_birth TEXT NOT NULL,
-            username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
+    import psycopg2
+    conn = psycopg2.connect(SUPABASE_DB_URL)
     return conn
 
 def add_user(first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password):
     conn = get_connection()
     try:
-        conn.execute('''
-            INSERT INTO users (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password))
+        with conn.cursor() as cursor:
+            cursor.execute('''
+                INSERT INTO users (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (first_name, last_name, mobile_number, email, occupation, date_of_birth, username, password))
         conn.commit()
-        print(f"✅ User '{username}' added successfully")
+        print(f"✅ User '{username}' added successfully to Supabase")
         return True
-    except sqlite3.IntegrityError:
-        print(f"❌ Username '{username}' already exists")
-        return False
     except Exception as e:
         print(f"❌ Error adding user: {e}")
         return False
@@ -321,10 +310,13 @@ def add_user(first_name, last_name, mobile_number, email, occupation, date_of_bi
 
 def authenticate_user(username, password):
     conn = get_connection()
-    cursor = conn.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, password))
-    user = cursor.fetchone()
-    conn.close()
-    return user
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
+            user = cursor.fetchone()
+        return user
+    finally:
+        conn.close()
 
 # ==================== LSTM PREDICTION ====================
 def lstm_predict(data, n_future=7, n_past=60, epochs=10):
@@ -439,7 +431,7 @@ def signup():
                 flash('Account created successfully! Please login.', 'success')
                 return redirect(url_for('login'))
             else:
-                flash('Username already exists. Please choose a different username.', 'error')
+                flash('Username already exists or database error occurred.', 'error')
     
     return render_template('signup.html')
 
@@ -452,15 +444,18 @@ def logout():
 
 @app.route('/admin/users')
 def view_users():
-    if session.get('user') != 'test': # Change 'test' to your username
+    if session.get('user') != 'test': 
         return "Access Denied", 403
         
     conn = get_connection()
-    cursor = conn.execute('SELECT id, first_name, last_name, email, username FROM users')
-    users = cursor.fetchall()
-    conn.close()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT id, first_name, last_name, email, username FROM users')
+            users = cursor.fetchall()
+    finally:
+        conn.close()
     
-    html = "<h1>Registered Users on Live Server</h1><ul>"
+    html = "<h1>Registered Users on Supabase</h1><ul>"
     for user in users:
         html += f"<li>ID: {user[0]} | Name: {user[1]} {user[2]} | Email: {user[3]} | Username: {user[4]}</li>"
     html += "</ul>"
@@ -496,7 +491,6 @@ def main_page():
         'last_date': None
     }
 
-    # Fetch data using the fallback generator
     df, is_simulated = get_stock_data_with_fallback(selected_symbol, start_date, end_date)
 
     if df.empty:
@@ -717,8 +711,8 @@ def sentiment():
                 sentiment_data[symbol] = {'error': str(e)}
     
     return render_template('sentiment.html',
-                         stocks=display_names,
-                         sentiment_data=sentiment_data)
+                           stocks=display_names,
+                           sentiment_data=sentiment_data)
 
 init_db()
 
