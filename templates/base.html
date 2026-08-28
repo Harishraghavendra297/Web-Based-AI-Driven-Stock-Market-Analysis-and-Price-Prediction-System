@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
     <title>
         Stock Prediction App
@@ -27,8 +27,8 @@
     <!-- NAVBAR -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('main_page') }}">
-                📈Web-Based AI-Driven Stock Market Analysis and Price Prediction System
+            <a class="navbar-brand text-wrap fs-6" href="{{ url_for('main_page') }}">
+                📈 AI-Driven Stock Market Analysis System
             </a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -41,16 +41,12 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('main_page') }}">Main</a>
                         </li>
-
-                        <!-- ✅ FIXED HERE -->
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('fundamental_data') }}">Fundamental</a>
                         </li>
-
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('news') }}">News</a>
                         </li>
-
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('sentiment') }}">Sentiment</a>
                         </li>
@@ -60,7 +56,7 @@
                 <ul class="navbar-nav">
                     {% if 'user' in session %}
                         <li class="nav-item">
-                            <span class="nav-link">Welcome, {{ session['user'] }}</span>
+                            <span class="nav-link text-info">Welcome, {{ session['user'] }}</span>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
@@ -79,7 +75,7 @@
     </nav>
 
     <!-- MAIN CONTAINER -->
-    <div class="container mt-4">
+    <div class="container-fluid px-3 mt-3">
 
         <!-- FLASH MESSAGES -->
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -106,3 +102,725 @@
 
 </body>
 </html>
+```[cite: 9]
+
+---
+
+### 2. Updated `main.html`
+*Optimized grid columns and wrapper divs for phone viewports.*
+
+```html
+{% extends "base.html" %}
+{% block title %} | Stock Analysis{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- ================= SIDEBAR ================= -->
+    <div class="col-12 col-lg-3">
+        <div class="card dark-card mb-3">
+            <div class="card-header">
+                <h5>📊 Stock Selection</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main_page') }}">
+
+                    <div class="mb-3">
+                        <label class="form-label">Select Stock</label>
+                        <select class="form-select" name="stock" required>
+                            {% for display_name in stocks.keys() %}
+                                <option value="{{ display_name }}"
+                                    {% if display_name == selected_stock %}selected{% endif %}>
+                                    {{ display_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" class="form-control"
+                               name="start_date"
+                               value="{{ start_date }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">End Date</label>
+                        <input type="date" class="form-control"
+                               name="end_date"
+                               value="{{ end_date }}" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        Analyze
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% if has_data %}
+        <div class="card dark-card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2">📌 Current Info</h6>
+                <p class="mb-1"><strong>Symbol:</strong> {{ selected_symbol }}</p>
+                <p class="mb-1"><strong>Current Price:</strong> {{ currency_symbol }}{{ "%.2f"|format(current_price) }}</p>
+                <p class="mb-0"><strong>Last Updated:</strong> {{ last_date }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ================= MAIN CONTENT ================= -->
+    <div class="col-12 col-lg-9">
+        {% if has_data %}
+        <div class="card dark-card mb-4">
+            <div class="card-header">
+                <h4 class="fw-bold fs-5">📈 {{ selected_stock }} Analysis</h4>
+            </div>
+
+            <div class="card-body px-2 px-md-3">
+
+                <!-- PRICE TREND -->
+                <div class="analysis-section">
+                    <h5 class="section-title">📈 Price Trend</h5>
+                    <div class="chart-box">
+                        <div id="price-chart" style="width:100%;"></div>
+                    </div>
+                </div>
+
+                <!-- LINEAR REGRESSION -->
+                <div class="analysis-section">
+                    <div class="section-divider"></div>
+                    <h5 class="section-title">📐 Linear Regression Prediction</h5>
+                    <div class="chart-box">
+                        <div id="lr-chart" style="width:100%;"></div>
+                    </div>
+                </div>
+
+                <!-- LSTM -->
+                <div class="analysis-section">
+                    <div class="section-divider"></div>
+                    <h5 class="section-title">🤖 LSTM Future Prediction (Next 7 Days)</h5>
+                    <div class="chart-box">
+                        <div id="lstm-chart" style="width:100%;"></div>
+                    </div>
+                </div>
+
+                {% if lstm_table_data %}
+                <div class="analysis-section">
+                    <h5 class="section-title mt-4">📊 LSTM Prediction Table</h5>
+                    <div class="table-responsive mt-3">
+                        <table class="table table-dark table-striped text-now5rap">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Predicted Price</th>
+                                    <th>Change (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pred in lstm_table_data %}
+                                <tr>
+                                    <td>{{ pred.date }}</td>
+                                    <td>{{ currency_symbol }}{{ "%.2f"|format(pred.price) }}</td>
+                                    <td class="{% if pred.change > 0 %}text-success{% elif pred.change < 0 %}text-danger{% endif %}">
+                                        {{ "%.2f"|format(pred.change) }}%
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if recent_data %}
+                <div class="analysis-section">
+                    <div class="section-divider"></div>
+                    <h5 class="section-title">🕒 Recent Price Data (Last 10 Days)</h5>
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped table-bordered mt-2 text-nowrap">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Open</th>
+                                    <th>High</th>
+                                    <th>Low</th>
+                                    <th>Close</th>
+                                    <th>Volume</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in recent_data %}
+                                <tr>
+                                    <td>{{ row.Date }}</td>
+                                    <td>{{ currency_symbol }}{{ row.Open }}</td>
+                                    <td>{{ currency_symbol }}{{ row.High }}</td>
+                                    <td>{{ currency_symbol }}{{ row.Low }}</td>
+                                    <td><strong>{{ currency_symbol }}{{ row.Close }}</strong></td>
+                                    <td>{{ "{:,}".format(row.Volume) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="price-data" type="application/json">
+{{ price_data | safe if price_data else "null" }}
+</script>
+
+<script id="lr-data" type="application/json">
+{{ lr_data | safe if lr_data else "null" }}
+</script>
+
+<script id="lstm-data" type="application/json">
+{{ lstm_data | safe if lstm_data else "null" }}
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const priceData = JSON.parse(document.getElementById("price-data").textContent);
+    const lrData = JSON.parse(document.getElementById("lr-data").textContent);
+    const lstmData = JSON.parse(document.getElementById("lstm-data").textContent);
+
+    const chartConfig = { responsive: true, displayModeBar: false };
+
+    if (priceData) {
+        Plotly.newPlot("price-chart", [{
+            x: priceData.dates,
+            y: priceData.prices,
+            mode: "lines"
+        }], { title: "Price Trend", autosize: true, margin: { t: 30, b: 30, l: 40, r: 20 } }, chartConfig);
+    }
+
+    if (lrData) {
+        Plotly.newPlot("lr-chart", [
+            { x: lrData.dates, y: lrData.actual, mode: "lines", name: "Actual" },
+            { x: lrData.dates, y: lrData.predicted, mode: "lines", name: "Predicted" }
+        ], { title: "Linear Regression", autosize: true, margin: { t: 30, b: 30, l: 40, r: 20 } }, chartConfig);
+    }
+
+    if (lstmData) {
+        Plotly.newPlot("lstm-chart", [
+            { x: lstmData.historical_dates, y: lstmData.historical_prices, mode: "lines", name: "Historical" },
+            { x: lstmData.future_dates, y: lstmData.future_prices, mode: "lines+markers", name: "Predicted" }
+        ], { title: "LSTM Prediction", autosize: true, margin: { t: 30, b: 30, l: 40, r: 20 } }, chartConfig);
+    }
+
+    // Force charts to resize neatly when screen boundaries adjust
+    window.addEventListener('resize', function() {
+        ['price-chart', 'lr-chart', 'lstm-chart'].forEach(id => {
+            let el = document.getElementById(id);
+            if(el && el.data) Plotly.Plots.resize(el);
+        });
+    });
+});
+</script>
+{% endblock %}
+```[cite: 12]
+
+---
+
+### 3. Updated `fundamental.html`
+*Stacked column layouts for clean mobile viewing.*
+
+```html
+{% extends "base.html" %}
+
+{% block title %} | Fundamental Data{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- SIDEBAR -->
+    <div class="col-12 col-lg-3">
+        <div class="card dark-card">
+            <div class="card-header">
+                <h5>Select Stocks</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Stocks</label>
+                        <select class="form-select" name="stocks" multiple size="10">
+                            {% for display_name in stocks.keys() %}
+                                <option value="{{ display_name }}">{{ display_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Hold Ctrl / tap multiple to select</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        Get Data
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="col-12 col-lg-9">
+        {% if fundamentals %}
+            {% for symbol, data in fundamentals.items() %}
+            <div class="card dark-card mb-3">
+                <div class="card-header">
+                    <h5 class="fs-6 mb-0">{{ data.company }} ({{ symbol }})</h5>
+                </div>
+                <div class="card-body">
+                    {% if data.error %}
+                        <div class="alert alert-danger">{{ data.error }}</div>
+                    {% else %}
+                        <div class="row">
+                            <div class="col-12 col-md-6">
+                                <p class="mb-1"><strong>Market Cap:</strong> {{ data.market_cap }}</p>
+                                <p class="mb-1"><strong>P/E Ratio:</strong> {{ data.pe_ratio }}</p>
+                                <p class="mb-1"><strong>EPS:</strong> {{ data.eps }}</p>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <p class="mb-1"><strong>Dividend Yield:</strong> {{ data.dividend_yield }}</p>
+                                <p class="mb-1"><strong>Sector:</strong> {{ data.sector }}</p>
+                                <p class="mb-0"><strong>Industry:</strong> {{ data.industry }}</p>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-info">
+                Select stocks from the sidebar to view fundamental data.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+```[cite: 10]
+
+---
+
+### 4. Updated `news.html`
+*Responsive flex formatting and text breaks.*
+
+```html
+{% extends "base.html" %}
+
+{% block title %}Stock News{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- ===== SIDEBAR ===== -->
+    <div class="col-12 col-lg-3">
+        <div class="card dark-card">
+            <div class="card-header">
+                <h5>Select Stocks</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <select class="form-select mb-3" name="stocks" multiple size="10">
+                        {% for name in stocks.keys() %}
+                            <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        Get News
+                    </button>
+
+                    <small class="text-muted d-block mt-2">
+                        Select multiple stocks to filter updates
+                    </small>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== NEWS CONTENT ===== -->
+    <div class="col-12 col-lg-9">
+        {% if news_data %}
+            {% for symbol, data in news_data.items() %}
+            <div class="card dark-card mb-3">
+                <div class="card-header">
+                    <h5 class="fs-6 mb-0">{{ data.company }} ({{ symbol }})</h5>
+                </div>
+                <div class="card-body">
+                    {% if data.error %}
+                        <div class="alert alert-danger">{{ data.error }}</div>
+                    {% elif data.news %}
+                        <ul class="list-group list-group-flush">
+                            {% for item in data.news %}
+                            <li class="list-group-item bg-dark text-light border-secondary px-0">
+                                <h6 class="mb-1 fs-6">
+                                    <a href="{{ item.link }}" target="_blank" class="text-info text-decoration-none">
+                                        {{ item.title }}
+                                    </a>
+                                </h6>
+                                {% if item.published %}
+                                <small class="text-muted d-block mb-1">{{ item.published }}</small>
+                                {% endif %}
+                                <p class="mt-1 mb-0 small text-light opacity-75">
+                                    {{ item.summary }}
+                                </p>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted">No news found for this stock.</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-info">
+                Select stocks from the panel to view the latest news.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+```[cite: 13]
+
+---
+
+### 5. Updated `sentiment.html`
+*Stacked metrics cards for mobile screens.*
+
+```html
+{% extends "base.html" %}
+
+{% block title %}Sentiment Analysis{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-12 col-lg-3">
+        <div class="card dark-card">
+            <div class="card-header">
+                <h5>Select Stocks</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Stocks</label>
+                        <select class="form-select" name="stocks" multiple size="10">
+                            {% for display_name in stocks.keys() %}
+                            <option value="{{ display_name }}">{{ display_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Select multiple options</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Analyze Sentiment</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-9">
+        {% if sentiment_data %}
+        {% for symbol, data in sentiment_data.items() %}
+        <div class="card dark-card mb-3">
+            <div class="card-header">
+                <h5 class="fs-6 mb-0">Sentiment for {{ data.company }}</h5>
+            </div>
+            <div class="card-body">
+                {% if 'error' in data %}
+                <div class="alert alert-danger">{{ data.error }}</div>
+                {% else %}
+                <!-- Sentiment Summary -->
+                <div class="row g-2 mb-3">
+                    <div class="col-4">
+                        <div class="card bg-success text-white text-center p-2">
+                            <h5 class="mb-0">{{ data.summary.positive }}</h5>
+                            <small>Positive</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="card bg-secondary text-white text-center p-2">
+                            <h5 class="mb-0">{{ data.summary.neutral }}</h5>
+                            <small>Neutral</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="card bg-danger text-white text-center p-2">
+                            <h5 class="mb-0">{{ data.summary.negative }}</h5>
+                            <small>Negative</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Individual News Sentiments -->
+                <h6 class="fs-6">News Breakdown</h6>
+                {% for item in data.sentiments %}
+                <div class="sentiment-item mb-2 p-2 border rounded 
+                    {% if item.sentiment == 'Positive' %}border-success
+                    {% elif item.sentiment == 'Negative' %}border-danger
+                    {% else %}border-secondary{% endif %}">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+                        <span class="small">{{ item.title }}</span>
+                        <span class="badge 
+                            {% if item.sentiment == 'Positive' %}bg-success
+                            {% elif item.sentiment == 'Negative' %}bg-danger
+                            {% else %}bg-secondary{% endif %}">
+                            {{ item.sentiment }} ({{ "%.3f"|format(item.score) }})
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="alert alert-info">
+            Select stocks from the sidebar to analyze sentiment.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+```[cite: 14]
+
+---
+
+### 6. Updated `login.html` & `signup.html`
+*Centered constraints and fluid container bounds.*
+
+#### **login.html**
+```html
+{% extends "base.html" %}
+{% block title %} | Login{% endblock %}
+
+{% block content %}
+<style>
+.glow-card {
+    background: #111;
+    border-radius: 18px;
+    padding: 2px;
+    background: linear-gradient(135deg, #00f2ff, #7f00ff);
+}
+.glow-inner { background: #111; border-radius: 16px; }
+.form-control { background: #0b0b0b; color: #fff; border: 1px solid #333; }
+.form-control:focus { background: #0b0b0b; color: #fff; border-color: #00f2ff; box-shadow: none; }
+.btn-animated { background: linear-gradient(135deg, #00f2ff, #7f00ff); border: none; color: #fff; }
+.password-wrapper { position: relative; }
+.toggle-password { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #aaa; }
+</style>
+
+<div class="row justify-content-center align-items-center" style="min-height:80vh;">
+    <div class="col-12 col-md-8 col-lg-4 px-3">
+        <div class="glow-card">
+            <div class="glow-inner p-4 text-center">
+                <div class="mb-3">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="50">
+                </div>
+                <h3 class="fw-bold text-info fs-4">AI Stock Insight</h3>
+                <p class="text-muted small mb-4">Smart Market Analysis & Prediction</p>
+
+                <form method="POST" action="{{ url_for('login') }}">
+                    <div class="mb-3 text-start">
+                        <label class="form-label text-muted small">Username</label>
+                        <input type="text" class="form-control" name="username" required>
+                    </div>
+
+                    <div class="mb-4 text-start password-wrapper">
+                        <label class="form-label text-muted small">Password</label>
+                        <input type="password" class="form-control" name="password" id="password" required>
+                        <span class="toggle-password" onclick="togglePassword()">👁️</span>
+                    </div>
+
+                    <button type="submit" class="btn btn-animated w-100 fw-semibold py-2">Login</button>
+                </form>
+
+                <div class="text-center mt-3">
+                    <p class="text-muted small mb-1">New here?</p>
+                    <a href="{{ url_for('signup') }}" class="btn btn-outline-secondary btn-sm w-100 rounded-3">Create Account</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function togglePassword() {
+    const pwd = document.getElementById("password");
+    pwd.type = pwd.type === "password" ? "text" : "password";
+}
+</script>
+{% endblock %}
+```[cite: 11]
+
+#### **signup.html**
+```html
+{% extends "base.html" %}
+{% block title %} | Sign Up{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-8 px-2">
+        <div class="card dark-card mt-3 mb-5 glow-border">
+            <div class="card-header text-center">
+                <img src="{{ url_for('static', filename='logo.png') }}" width="40" class="mb-2">
+                <h4 class="text-info fw-bold fs-5">Create Account</h4>
+                <small class="text-muted">AI-Powered Stock Analysis Platform</small>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('signup') }}">
+                    <div class="row">
+                        <div class="col-12 col-md-6 mb-3">
+                            <label class="form-label small">First Name *</label>
+                            <input type="text" class="form-control" name="first_name" required>
+                        </div>
+                        <div class="col-12 col-md-6 mb-3">
+                            <label class="form-label small">Last Name *</label>
+                            <input type="text" class="form-control" name="last_name" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-12 col-md-6 mb-3">
+                            <label class="form-label small">Mobile Number *</label>
+                            <input type="tel" class="form-control" name="mobile_number" required>
+                        </div>
+                        <div class="col-12 col-md-6 mb-3">
+                            <label class="form-label small">Email *</label>
+                            <input type="email" class="form-control" name="email" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small">Occupation</label>
+                        <input type="text" class="form-control" name="occupation">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small">Date of Birth *</label>
+                        <input type="date" class="form-control" name="date_of_birth" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small">Username *</label>
+                        <input type="text" class="form-control" name="username" required>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-12 col-md-6 mb-3 password-wrapper">
+                            <label class="form-label small">Password *</label>
+                            <input type="password" class="form-control" name="password" id="signup-password" required>
+                            <span class="toggle-password" onclick="toggleSignupPassword()">👁️</span>
+                        </div>
+
+                        <div class="col-12 col-md-6 mb-3">
+                            <label class="form-label small">Confirm Password *</label>
+                            <input type="password" class="form-control" name="confirm_password" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 mt-2">Create Account</button>
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-secondary w-100 mt-3">Back to Login</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleSignupPassword() {
+    const pwd = document.getElementById("signup-password");
+    pwd.type = pwd.type === "password" ? "text" : "password";
+}
+</script>
+{% endblock %}
+```[cite: 15]
+
+---
+
+### 7. Updated `style.css`
+*Enforces responsive bounds and prevents horizontal viewport breaking.*
+
+```css
+.dark-theme {
+    background-color: #121212;
+    color: #e0e0e0;
+    min-height: 100vh;
+    overflow-x: hidden; /* Prevents mobile side-scrolling */
+}
+
+.dark-card {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    border: 1px solid #333;
+}
+
+.dark-card .card-header {
+    background-color: #252525;
+    border-bottom: 1px solid #333;
+}
+
+.table-dark {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+}
+
+.form-control,
+.form-select {
+    background-color: #252525;
+    color: #e0e0e0;
+    border: 1px solid #444;
+}
+
+.form-control:focus,
+.form-select:focus {
+    background-color: #252525;
+    color: #e0e0e0;
+    border-color: #666;
+    box-shadow: 0 0 0 0.25rem rgba(255, 255, 255, 0.1);
+}
+
+.analysis-section {
+    margin-bottom: 1.5rem;
+}
+
+/* Fluid Chart Container Layout for Mobile Screens */
+.chart-box {
+    background: linear-gradient(180deg, #1c1c1c, #151515);
+    border-radius: 12px;
+    padding: 8px;
+    margin-top: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    width: 100%;
+    overflow: hidden;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 1.05rem;
+}
+
+.section-divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, #444, transparent);
+    margin: 15px 0;
+}
+
+/* Mobile Media Adjustments */
+@media (max-width: 768px) {
+    body {
+        font-size: 0.95rem;
+    }
+    .container-fluid {
+        padding-left: 8px !important;
+        padding-right: 8px !important;
+    }
+}
+```[cite: 16]
