@@ -242,7 +242,7 @@ def get_fundamentals_with_fallback(symbol, company_name):
 
 # ==================== DATABASE FUNCTIONS (SUPABASE POSTGRESQL) ====================
 # Supabase connection string configured from user settings
-SUPABASE_DB_URL = 'postgresql://postgres:YOUR_ACTUAL_PASSWORD@db.lyaptqtkyeumynygcnvm.supabase.co:5432/postgres'
+SUPABASE_DB_URL = 'postgresql://postgres.lyaptqtkyeumynygcnvm:Idontknow.1@hari@aws-0-ap-south-1.pooler.supabase.com:5432/postgres'
 
 def init_db():
     print("=" * 50)
